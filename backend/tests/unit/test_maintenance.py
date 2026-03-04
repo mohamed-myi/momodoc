@@ -36,18 +36,14 @@ class TestCleanupOrphanedVectors:
         await db.commit()
         return f
 
-    async def _create_note(
-        self, db: AsyncSession, project_id: str
-    ) -> Note:
+    async def _create_note(self, db: AsyncSession, project_id: str) -> Note:
         note = Note(project_id=project_id, content="test content")
         db.add(note)
         await db.commit()
         return note
 
     @pytest.mark.asyncio
-    async def test_removes_vectors_for_deleted_project(
-        self, db_session, mock_vectordb
-    ):
+    async def test_removes_vectors_for_deleted_project(self, db_session, mock_vectordb):
         """Vectors referencing a project_id that no longer exists should be deleted."""
         # Create one project that exists
         existing = await self._create_project(db_session, "existing-project")
@@ -69,9 +65,7 @@ class TestCleanupOrphanedVectors:
         assert not any(existing.id in f for f in delete_filters)
 
     @pytest.mark.asyncio
-    async def test_preserves_vectors_for_existing_projects(
-        self, db_session, mock_vectordb
-    ):
+    async def test_preserves_vectors_for_existing_projects(self, db_session, mock_vectordb):
         """Vectors referencing existing projects should not be touched."""
         p1 = await self._create_project(db_session, "project-1")
         p2 = await self._create_project(db_session, "project-2")
@@ -87,9 +81,7 @@ class TestCleanupOrphanedVectors:
         mock_vectordb.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_removes_vectors_for_deleted_source(
-        self, db_session, mock_vectordb
-    ):
+    async def test_removes_vectors_for_deleted_source(self, db_session, mock_vectordb):
         """Vectors referencing a source_id that no longer exists should be deleted."""
         project = await self._create_project(db_session, "test-project")
         existing_file = await self._create_file(db_session, project.id)
@@ -108,9 +100,7 @@ class TestCleanupOrphanedVectors:
         assert not any(existing_file.id in f for f in delete_filters)
 
     @pytest.mark.asyncio
-    async def test_preserves_vectors_for_existing_sources(
-        self, db_session, mock_vectordb
-    ):
+    async def test_preserves_vectors_for_existing_sources(self, db_session, mock_vectordb):
         """Vectors referencing existing files/notes/issues should not be touched."""
         project = await self._create_project(db_session, "test-project")
         file_record = await self._create_file(db_session, project.id)
@@ -126,9 +116,7 @@ class TestCleanupOrphanedVectors:
         mock_vectordb.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_handles_empty_lancedb_gracefully(
-        self, db_session, mock_vectordb
-    ):
+    async def test_handles_empty_lancedb_gracefully(self, db_session, mock_vectordb):
         """If LanceDB has no data, cleanup should do nothing without errors."""
         mock_vectordb.get_distinct_column.return_value = []
 
@@ -137,9 +125,7 @@ class TestCleanupOrphanedVectors:
         mock_vectordb.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_handles_lancedb_error_gracefully(
-        self, db_session, mock_vectordb
-    ):
+    async def test_handles_lancedb_error_gracefully(self, db_session, mock_vectordb):
         """If LanceDB raises an error, cleanup should log and continue."""
         mock_vectordb.get_distinct_column.side_effect = RuntimeError("LanceDB down")
 

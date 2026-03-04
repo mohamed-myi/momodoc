@@ -24,9 +24,7 @@ async def cleanup_orphaned_vectors(db: AsyncSession, vectordb: AsyncVectorStore)
     await _cleanup_orphaned_sources(db, vectordb)
 
 
-async def _cleanup_orphaned_projects(
-    db: AsyncSession, vectordb: AsyncVectorStore
-) -> None:
+async def _cleanup_orphaned_projects(db: AsyncSession, vectordb: AsyncVectorStore) -> None:
     """Delete vectors for project IDs that no longer exist in SQLite."""
     try:
         vector_project_ids = await vectordb.get_distinct_column("project_id")
@@ -46,14 +44,10 @@ async def _cleanup_orphaned_projects(
         try:
             await vectordb.delete(AsyncVectorStore.filter_by_project(project_id))
         except Exception as e:
-            logger.warning(
-                "Failed to delete orphaned vectors for project %s: %s", project_id, e
-            )
+            logger.warning("Failed to delete orphaned vectors for project %s: %s", project_id, e)
 
 
-async def _cleanup_orphaned_sources(
-    db: AsyncSession, vectordb: AsyncVectorStore
-) -> None:
+async def _cleanup_orphaned_sources(db: AsyncSession, vectordb: AsyncVectorStore) -> None:
     """Delete vectors for source IDs (files, notes, issues) that no longer exist."""
     try:
         vector_source_ids = await vectordb.get_distinct_column("source_id")
@@ -76,6 +70,4 @@ async def _cleanup_orphaned_sources(
         try:
             await vectordb.delete(AsyncVectorStore.filter_by_source(source_id))
         except Exception as e:
-            logger.warning(
-                "Failed to delete orphaned vectors for source %s: %s", source_id, e
-            )
+            logger.warning("Failed to delete orphaned vectors for source %s: %s", source_id, e)

@@ -5,6 +5,7 @@ Revises: 004
 Create Date: 2026-02-19
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -39,7 +40,9 @@ def upgrade() -> None:
     op.create_index("ix_chat_sessions_updated_at", "chat_sessions", ["updated_at"], unique=False)
     op.create_index("ix_chat_messages_session_id", "chat_messages", ["session_id"], unique=False)
     op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"], unique=False)
-    op.create_index("ix_message_sources_message_id", "message_sources", ["message_id"], unique=False)
+    op.create_index(
+        "ix_message_sources_message_id", "message_sources", ["message_id"], unique=False
+    )
     op.create_index("ix_message_sources_source_id", "message_sources", ["source_id"], unique=False)
 
     # Sync monitoring and error retrieval

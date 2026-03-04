@@ -77,9 +77,7 @@ class ClaudeProvider(LLMProvider):
     def get_model_name(self) -> str:
         return self.model
 
-    def _split_messages(
-        self, messages: list[LLMMessage]
-    ) -> tuple[str | None, list[dict]]:
+    def _split_messages(self, messages: list[LLMMessage]) -> tuple[str | None, list[dict]]:
         system_msg = None
         chat_messages = []
         for msg in messages:

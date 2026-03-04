@@ -258,9 +258,7 @@ class TestProjectSourceDirectoryValidation:
     @pytest.mark.asyncio
     async def test_update_project_with_nonexistent_directory_rejected(self, client):
         """PATCH /projects/{id} with nonexistent source_directory should return 422."""
-        create_resp = await client.post(
-            "/api/v1/projects", json={"name": "update-bad-dir"}
-        )
+        create_resp = await client.post("/api/v1/projects", json={"name": "update-bad-dir"})
         project_id = create_resp.json()["id"]
 
         resp = await client.patch(
@@ -272,9 +270,7 @@ class TestProjectSourceDirectoryValidation:
     @pytest.mark.asyncio
     async def test_update_project_clear_source_directory_ok(self, client):
         """PATCH /projects/{id} setting source_directory to null should succeed."""
-        create_resp = await client.post(
-            "/api/v1/projects", json={"name": "clear-dir"}
-        )
+        create_resp = await client.post("/api/v1/projects", json={"name": "clear-dir"})
         project_id = create_resp.json()["id"]
 
         resp = await client.patch(
@@ -352,9 +348,7 @@ class TestProjectCounts:
         resp = await client.post("/api/v1/projects", json={"name": "list-counts"})
         pid = resp.json()["id"]
 
-        await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "An issue"}
-        )
+        await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "An issue"})
 
         resp = await client.get("/api/v1/projects")
         assert resp.status_code == 200

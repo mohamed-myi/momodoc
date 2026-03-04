@@ -90,9 +90,7 @@ class TestSearchScoreConversion:
         assert results[0].score == pytest.approx(0.4)
 
     @pytest.mark.asyncio
-    async def test_negative_distance_clamped_to_one(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_negative_distance_clamped_to_one(self, mock_vectordb, mock_embedder):
         """If distance is negative, similarity should remain bounded at 1.0."""
         mock_vectordb.search.return_value = [
             {
@@ -113,9 +111,7 @@ class TestSearchScoreConversion:
         assert results[0].score == 1.0
 
     @pytest.mark.asyncio
-    async def test_keyword_scores_use_monotonic_normalization(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_keyword_scores_use_monotonic_normalization(self, mock_vectordb, mock_embedder):
         """Keyword BM25 scores should be normalized without hard clamping."""
         mock_vectordb.fts_search.return_value = [
             {
@@ -137,9 +133,7 @@ class TestSearchScoreConversion:
         assert results[0].score == pytest.approx(5.0 / 6.0)
 
     @pytest.mark.asyncio
-    async def test_missing_distance_defaults_to_score_one(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_distance_defaults_to_score_one(self, mock_vectordb, mock_embedder):
         """If _distance key is missing, default 0.0 should give score 1.0."""
         mock_vectordb.search.return_value = [
             {
@@ -176,27 +170,21 @@ class TestSearchResultMapping:
                 "project_id": "p1",
             }
         ]
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results[0].filename is None
         assert results[0].original_path is None
 
     @pytest.mark.asyncio
     async def test_no_results_returns_empty_list(self, mock_vectordb, mock_embedder):
         """Empty search results from vectordb should produce empty list."""
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results == []
 
     @pytest.mark.asyncio
     async def test_project_filter_passed_to_vectordb(self, mock_vectordb, mock_embedder):
         """When project_id is given, the filter string should be passed."""
         test_uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-        await search_service.search(
-            mock_vectordb, mock_embedder, "query", project_id=test_uuid
-        )
+        await search_service.search(mock_vectordb, mock_embedder, "query", project_id=test_uuid)
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][2] == f"project_id = '{test_uuid}'"
 
@@ -210,9 +198,7 @@ class TestSearchResultMapping:
     @pytest.mark.asyncio
     async def test_top_k_forwarded_to_vectordb(self, mock_vectordb, mock_embedder):
         """The top_k parameter should be passed to the vectordb search."""
-        await search_service.search(
-            mock_vectordb, mock_embedder, "query", top_k=7
-        )
+        await search_service.search(mock_vectordb, mock_embedder, "query", top_k=7)
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][3] == 7
 
@@ -245,9 +231,7 @@ class TestSearchMissingFields:
         return embedder
 
     @pytest.mark.asyncio
-    async def test_missing_source_type_defaults_to_empty(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_source_type_defaults_to_empty(self, mock_vectordb, mock_embedder):
         """Missing source_type should default to empty string."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -261,15 +245,11 @@ class TestSearchMissingFields:
                 "project_id": "p1",
             }
         ]
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results[0].source_type == ""
 
     @pytest.mark.asyncio
-    async def test_missing_chunk_index_defaults_to_zero(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_chunk_index_defaults_to_zero(self, mock_vectordb, mock_embedder):
         """Missing chunk_index should default to 0."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -283,15 +263,11 @@ class TestSearchMissingFields:
                 "project_id": "p1",
             }
         ]
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results[0].chunk_index == 0
 
     @pytest.mark.asyncio
-    async def test_missing_file_type_defaults_to_empty(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_file_type_defaults_to_empty(self, mock_vectordb, mock_embedder):
         """Missing file_type should default to empty string."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -305,15 +281,11 @@ class TestSearchMissingFields:
                 "project_id": "p1",
             }
         ]
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results[0].file_type == ""
 
     @pytest.mark.asyncio
-    async def test_missing_project_id_defaults_to_empty(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_project_id_defaults_to_empty(self, mock_vectordb, mock_embedder):
         """Missing project_id should default to empty string."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -327,9 +299,7 @@ class TestSearchMissingFields:
                 "_relevance_score": 0.9,
             }
         ]
-        results, _plan = await search_service.search(
-            mock_vectordb, mock_embedder, "query"
-        )
+        results, _plan = await search_service.search(mock_vectordb, mock_embedder, "query")
         assert results[0].project_id == ""
 
 
@@ -359,12 +329,8 @@ class TestSearchWithReranker:
         reranker = MagicMock(spec=Reranker)
 
         async def _arerank(query, documents, top_k=10):
-            ranked = sorted(
-                enumerate(documents), key=lambda x: len(x[1]), reverse=True
-            )
-            return [
-                (idx, 1.0 - i * 0.1) for i, (idx, _) in enumerate(ranked[:top_k])
-            ]
+            ranked = sorted(enumerate(documents), key=lambda x: len(x[1]), reverse=True)
+            return [(idx, 1.0 - i * 0.1) for i, (idx, _) in enumerate(ranked[:top_k])]
 
         reranker.arerank = AsyncMock(side_effect=_arerank)
         return reranker
@@ -383,9 +349,7 @@ class TestSearchWithReranker:
         }
 
     @pytest.mark.asyncio
-    async def test_reranker_none_preserves_current_behavior(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_reranker_none_preserves_current_behavior(self, mock_vectordb, mock_embedder):
         """When reranker is None, behavior is identical to current."""
         mock_vectordb.hybrid_search.return_value = [
             self._make_row("s1", "hello", 0.9),
@@ -397,9 +361,7 @@ class TestSearchWithReranker:
         assert results[0].score == pytest.approx(0.9)
 
     @pytest.mark.asyncio
-    async def test_reranker_reorders_results(
-        self, mock_vectordb, mock_embedder, mock_reranker
-    ):
+    async def test_reranker_reorders_results(self, mock_vectordb, mock_embedder, mock_reranker):
         """With reranker, results should be reordered by cross-encoder scores."""
         mock_vectordb.hybrid_search.return_value = [
             self._make_row("s1", "short", 0.9),
@@ -417,9 +379,7 @@ class TestSearchWithReranker:
         assert results[1].source_id == "s1"
 
     @pytest.mark.asyncio
-    async def test_keyword_mode_skips_reranking(
-        self, mock_vectordb, mock_embedder, mock_reranker
-    ):
+    async def test_keyword_mode_skips_reranking(self, mock_vectordb, mock_embedder, mock_reranker):
         """Keyword mode should not trigger reranking."""
         mock_vectordb.fts_search.return_value = [
             self._make_row("s1", "keyword content") | {"_score": 5.0},
@@ -467,9 +427,7 @@ class TestSearchWithReranker:
         assert results[0].score != 0.9
 
     @pytest.mark.asyncio
-    async def test_vector_mode_uses_reranker(
-        self, mock_vectordb, mock_embedder, mock_reranker
-    ):
+    async def test_vector_mode_uses_reranker(self, mock_vectordb, mock_embedder, mock_reranker):
         """Reranker should also work with vector-only mode."""
         mock_vectordb.search.return_value = [
             self._make_row("s1", "content") | {"_distance": 0.1},
@@ -504,9 +462,7 @@ class TestSearchReturnsQueryPlan:
 
     @pytest.mark.asyncio
     async def test_simple_query_returns_plan(self, mock_vectordb, mock_embedder):
-        _results, plan = await search_service.search(
-            mock_vectordb, mock_embedder, "files"
-        )
+        _results, plan = await search_service.search(mock_vectordb, mock_embedder, "files")
         assert plan is not None
         assert plan.query_type == QueryType.SIMPLE
         assert plan.use_hyde is False
@@ -515,9 +471,7 @@ class TestSearchReturnsQueryPlan:
     @pytest.mark.asyncio
     async def test_keyword_query_forces_fts(self, mock_vectordb, mock_embedder):
         """KEYWORD_LOOKUP should route to keyword search when mode is hybrid."""
-        await search_service.search(
-            mock_vectordb, mock_embedder, "getUserById"
-        )
+        await search_service.search(mock_vectordb, mock_embedder, "getUserById")
         mock_vectordb.fts_search.assert_called_once()
         mock_vectordb.hybrid_search.assert_not_called()
 
@@ -538,18 +492,16 @@ class TestSearchReturnsQueryPlan:
         )
 
         await search_service.search(
-            mock_vectordb, mock_embedder, "How does auth work",
+            mock_vectordb,
+            mock_embedder,
+            "How does auth work",
             query_llm=mock_query_llm,
         )
         mock_query_llm.complete.assert_called_once()
         mock_vectordb.search.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_explicit_keyword_mode_overrides_plan(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_explicit_keyword_mode_overrides_plan(self, mock_vectordb, mock_embedder):
         """Explicit mode=keyword should be respected even if plan says hybrid."""
-        await search_service.search(
-            mock_vectordb, mock_embedder, "query", mode="keyword"
-        )
+        await search_service.search(mock_vectordb, mock_embedder, "query", mode="keyword")
         mock_vectordb.fts_search.assert_called_once()

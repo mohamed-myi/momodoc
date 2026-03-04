@@ -10,9 +10,7 @@ from app.services.ingestion.embedder import Embedder
 router = APIRouter()
 
 
-@router.post(
-    "/projects/{project_id}/issues", response_model=IssueResponse, status_code=201
-)
+@router.post("/projects/{project_id}/issues", response_model=IssueResponse, status_code=201)
 async def create_issue(
     data: IssueCreate,
     project=Depends(get_project),
@@ -32,14 +30,15 @@ async def list_issues(
     db: AsyncSession = Depends(get_db),
 ):
     return await issue_service.list_issues(
-        db, project.id, status=status.value if status else None,
-        offset=offset, limit=limit,
+        db,
+        project.id,
+        status=status.value if status else None,
+        offset=offset,
+        limit=limit,
     )
 
 
-@router.patch(
-    "/projects/{project_id}/issues/{issue_id}", response_model=IssueResponse
-)
+@router.patch("/projects/{project_id}/issues/{issue_id}", response_model=IssueResponse)
 async def update_issue(
     issue_id: str,
     data: IssueUpdate,

@@ -224,4 +224,3 @@ def _cleanup_files(settings) -> None:
             os.remove(path)
         except OSError:
             pass
-

@@ -9,6 +9,7 @@ import httpx
 import pytest
 import typer
 from typer.testing import CliRunner
+
 runner = CliRunner()
 
 
@@ -532,9 +533,11 @@ class TestProjectCommands:
 
     def test_create_project(self):
         """project create should POST and display created project."""
-        client = self._mock_client({
-            "post": {"id": "aaaa-bbbb-cccc", "name": "my-proj"},
-        })
+        client = self._mock_client(
+            {
+                "post": {"id": "aaaa-bbbb-cccc", "name": "my-proj"},
+            }
+        )
 
         with patch("cli.commands.project.api_client", return_value=client):
             from cli.main import app

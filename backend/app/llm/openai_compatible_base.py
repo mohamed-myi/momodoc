@@ -102,4 +102,3 @@ class OpenAICompatibleProviderBase(LLMProvider):
         if phase == "stream":
             return LLMError(f"{self.provider_label} streaming error: {error}")
         return LLMError(f"{self.provider_label} API error: {error}")
-

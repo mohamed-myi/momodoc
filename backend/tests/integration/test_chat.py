@@ -129,9 +129,7 @@ class TestChatSessionManagement:
     @pytest.mark.asyncio
     async def test_delete_session(self, client, project_id, session_id):
         """Deleting a session should return 204 and remove it from list."""
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/chat/sessions/{session_id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/chat/sessions/{session_id}")
         assert resp.status_code == 204
 
         resp = await client.get(f"/api/v1/projects/{project_id}/chat/sessions")
@@ -140,9 +138,7 @@ class TestChatSessionManagement:
     @pytest.mark.asyncio
     async def test_delete_nonexistent_session_404(self, client, project_id):
         """Deleting a nonexistent session should return 404."""
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/chat/sessions/nonexistent-id"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/chat/sessions/nonexistent-id")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -180,9 +176,7 @@ class TestChatSessionManagement:
         assert len(resp.json()) == 2  # user + assistant
 
         # Delete the session
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/chat/sessions/{session_id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/chat/sessions/{session_id}")
         assert resp.status_code == 204
 
 
@@ -199,9 +193,7 @@ class TestGlobalChatSessions:
     @pytest.mark.asyncio
     async def test_create_global_session_with_title(self, client):
         """Global session with explicit title."""
-        resp = await client.post(
-            "/api/v1/chat/sessions", json={"title": "Global Chat"}
-        )
+        resp = await client.post("/api/v1/chat/sessions", json={"title": "Global Chat"})
         assert resp.status_code == 201
         assert resp.json()["title"] == "Global Chat"
 
@@ -217,9 +209,7 @@ class TestGlobalChatSessions:
             assert s["project_id"] is None
 
     @pytest.mark.asyncio
-    async def test_global_session_isolation_from_project_sessions(
-        self, client, project_id
-    ):
+    async def test_global_session_isolation_from_project_sessions(self, client, project_id):
         """Global sessions should not appear in project session lists, and vice versa."""
         # Create a project session
         await client.post(f"/api/v1/projects/{project_id}/chat/sessions")
@@ -360,9 +350,7 @@ class TestChatStreaming:
     @pytest.mark.asyncio
     async def test_stream_auto_titles_session(self, client, project_id):
         """Streaming should auto-title the session from the first query."""
-        session_resp = await client.post(
-            f"/api/v1/projects/{project_id}/chat/sessions"
-        )
+        session_resp = await client.post(f"/api/v1/projects/{project_id}/chat/sessions")
         sid = session_resp.json()["id"]
         assert session_resp.json()["title"] is None
 

@@ -93,10 +93,7 @@ async def get_file_chunks(
     filter_str = AsyncVectorStore.filter_by_source(file_id)
     # Chunk indices are assigned sequentially during ingestion.
     # Range filtering avoids scanning offset+limit rows for deep pages.
-    page_filter_str = (
-        f"{filter_str} AND chunk_index >= {offset} "
-        f"AND chunk_index < {offset + limit}"
-    )
+    page_filter_str = f"{filter_str} AND chunk_index >= {offset} AND chunk_index < {offset + limit}"
     rows = await vectordb.get_by_filter(
         page_filter_str,
         None,  # columns — return all

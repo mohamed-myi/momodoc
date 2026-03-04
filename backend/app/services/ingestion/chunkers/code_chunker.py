@@ -11,9 +11,7 @@ BOUNDARY_PATTERNS = {
     "typescript": re.compile(
         r"^(function |const \w+ = |let \w+ = |class |export |interface |type )", re.MULTILINE
     ),
-    "java": re.compile(
-        r"^(\s*(public|private|protected|static)\s+)", re.MULTILINE
-    ),
+    "java": re.compile(r"^(\s*(public|private|protected|static)\s+)", re.MULTILINE),
     "go": re.compile(r"^(func |type )", re.MULTILINE),
     "rust": re.compile(r"^(pub |fn |impl |struct |enum |trait |mod )", re.MULTILINE),
     "c": re.compile(r"^(\w+[\s*]+\w+\s*\()", re.MULTILINE),

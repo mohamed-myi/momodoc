@@ -7,9 +7,7 @@ class TestGlobalSearch:
     @pytest.mark.asyncio
     async def test_global_search_returns_response_with_results(self, client):
         """POST /search should return a SearchResponse with results list."""
-        resp = await client.post(
-            "/api/v1/search", json={"query": "test query"}
-        )
+        resp = await client.post("/api/v1/search", json={"query": "test query"})
         assert resp.status_code == 200
         body = resp.json()
         assert "results" in body
@@ -18,9 +16,7 @@ class TestGlobalSearch:
     @pytest.mark.asyncio
     async def test_global_search_includes_query_plan(self, client):
         """Response should include a query_plan field."""
-        resp = await client.post(
-            "/api/v1/search", json={"query": "test query"}
-        )
+        resp = await client.post("/api/v1/search", json={"query": "test query"})
         assert resp.status_code == 200
         body = resp.json()
         assert "query_plan" in body
@@ -40,9 +36,7 @@ class TestGlobalSearch:
         The reranker then narrows the results to the requested top_k.
         """
         mock_vectordb.hybrid_search.reset_mock()
-        await client.post(
-            "/api/v1/search", json={"query": "test", "top_k": 5}
-        )
+        await client.post("/api/v1/search", json={"query": "test", "top_k": 5})
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][3] == 50
 
@@ -50,23 +44,17 @@ class TestGlobalSearch:
     async def test_global_search_no_project_filter(self, client, mock_vectordb):
         """Global search should pass None as the filter string (no project scope)."""
         mock_vectordb.hybrid_search.reset_mock()
-        await client.post(
-            "/api/v1/search", json={"query": "global query"}
-        )
+        await client.post("/api/v1/search", json={"query": "global query"})
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][2] is None
 
     @pytest.mark.asyncio
     async def test_global_search_top_k_bounds(self, client):
         """top_k below 1 or above 50 should be rejected."""
-        resp = await client.post(
-            "/api/v1/search", json={"query": "test", "top_k": 0}
-        )
+        resp = await client.post("/api/v1/search", json={"query": "test", "top_k": 0})
         assert resp.status_code == 422
 
-        resp = await client.post(
-            "/api/v1/search", json={"query": "test", "top_k": 51}
-        )
+        resp = await client.post("/api/v1/search", json={"query": "test", "top_k": 51})
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
@@ -89,9 +77,7 @@ class TestGlobalSearch:
                 "project_id": "proj-1",
             }
         ]
-        resp = await client.post(
-            "/api/v1/search", json={"query": "readme"}
-        )
+        resp = await client.post("/api/v1/search", json={"query": "readme"})
         assert resp.status_code == 200
         results = resp.json()["results"]
         assert len(results) == 1
@@ -114,9 +100,7 @@ class TestProjectScopedSearch:
         assert isinstance(body["results"], list)
 
     @pytest.mark.asyncio
-    async def test_project_search_passes_project_filter(
-        self, client, project_id, mock_vectordb
-    ):
+    async def test_project_search_passes_project_filter(self, client, project_id, mock_vectordb):
         """Project-scoped search should pass the project_id as a filter."""
         mock_vectordb.hybrid_search.reset_mock()
         await client.post(

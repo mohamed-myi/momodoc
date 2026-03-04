@@ -5,6 +5,7 @@ Revises: 002
 Create Date: 2026-02-09
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -80,15 +81,11 @@ def upgrade() -> None:
 
     # Add chunk_count to issues
     with op.batch_alter_table("issues") as batch_op:
-        batch_op.add_column(
-            sa.Column("chunk_count", sa.Integer(), server_default="0")
-        )
+        batch_op.add_column(sa.Column("chunk_count", sa.Integer(), server_default="0"))
 
     # Add tags to files
     with op.batch_alter_table("files") as batch_op:
-        batch_op.add_column(
-            sa.Column("tags", sa.String(512), nullable=True)
-        )
+        batch_op.add_column(sa.Column("tags", sa.String(512), nullable=True))
 
 
 def downgrade() -> None:
@@ -99,9 +96,7 @@ def downgrade() -> None:
         batch_op.drop_column("chunk_count")
 
     with op.batch_alter_table("chat_messages") as batch_op:
-        batch_op.add_column(
-            sa.Column("sources_json", sa.Text(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("sources_json", sa.Text(), nullable=True))
 
     op.drop_table("message_sources")
     op.drop_table("sync_job_errors")

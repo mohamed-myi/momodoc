@@ -22,9 +22,7 @@ async def project_with_data(client, mock_vectordb):
 
 class TestProjectCascadeDelete:
     @pytest.mark.asyncio
-    async def test_delete_project_cleans_up_vectors(
-        self, client, project_with_data, mock_vectordb
-    ):
+    async def test_delete_project_cleans_up_vectors(self, client, project_with_data, mock_vectordb):
         """Deleting a project should call vectordb.delete with the project filter."""
         project_id, _ = project_with_data
         mock_vectordb.delete.reset_mock()

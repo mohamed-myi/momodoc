@@ -21,6 +21,7 @@ def _run_command(fn) -> int:
     except click.exceptions.Exit as exc:
         return int(exc.exit_code)
 
+
 def _env_str(name: str, default: str) -> str:
     value = os.getenv(name)
     return value if value else default

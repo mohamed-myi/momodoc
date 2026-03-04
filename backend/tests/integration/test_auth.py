@@ -18,9 +18,7 @@ class TestTokenAuth:
         app.state.session_token = TEST_TOKEN
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as unauthed:
+        async with AsyncClient(transport=transport, base_url="http://test") as unauthed:
             resp = await unauthed.get("/api/v1/projects")
         assert resp.status_code == 401
 
@@ -45,9 +43,7 @@ class TestTokenAuth:
         app.state.session_token = TEST_TOKEN
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as unauthed:
+        async with AsyncClient(transport=transport, base_url="http://test") as unauthed:
             resp = await unauthed.get("/api/v1/health")
         assert resp.status_code == 200
 

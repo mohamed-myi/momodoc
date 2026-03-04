@@ -66,17 +66,19 @@ async def search(
 
         _decomposed_sub_queries = await decompose_query(query, query_llm)
         results = await execute_decomposed_search(
-            _decomposed_sub_queries, embedder, vectordb, filter_str,
-            top_k_per_query=retrieval_limit, final_top_k=retrieval_limit,
+            _decomposed_sub_queries,
+            embedder,
+            vectordb,
+            filter_str,
+            top_k_per_query=retrieval_limit,
+            final_top_k=retrieval_limit,
         )
         plan = dataclasses.replace(plan, sub_queries=tuple(_decomposed_sub_queries))
     elif effective_mode == "keyword":
         results = await vectordb.fts_search(query, filter_str, retrieval_limit)
     elif effective_mode == "hybrid":
         query_vector = await embedder.aembed_single(query)
-        results = await vectordb.hybrid_search(
-            query_vector, query, filter_str, retrieval_limit
-        )
+        results = await vectordb.hybrid_search(query_vector, query, filter_str, retrieval_limit)
     else:  # vector
         query_vector = await embedder.aembed_single(query)
         results = await vectordb.search(query_vector, filter_str, retrieval_limit)
@@ -100,7 +102,9 @@ async def search(
             )
         logger.info(
             "Search complete: candidates=%d reranked=%d duration=%.1fms",
-            len(results), len(reranked), retrieval_ms,
+            len(results),
+            len(reranked),
+            retrieval_ms,
         )
         return reranked, plan
 
@@ -119,6 +123,8 @@ async def search(
         for row in results
     ]
     logger.info(
-        "Search complete: results=%d duration=%.1fms", len(out), retrieval_ms,
+        "Search complete: results=%d duration=%.1fms",
+        len(out),
+        retrieval_ms,
     )
     return out, plan

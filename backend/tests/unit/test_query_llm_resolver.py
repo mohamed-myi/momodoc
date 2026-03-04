@@ -55,12 +55,14 @@ class TestResolveQueryLlm:
     @pytest.mark.asyncio
     async def test_skips_ollama_default_checks_other_providers(self):
         mock_openai = AsyncMock(spec=LLMProvider)
-        registry = _make_registry({
-            "ollama": AsyncMock(spec=LLMProvider),
-            "claude": None,
-            "openai": mock_openai,
-            "gemini": None,
-        })
+        registry = _make_registry(
+            {
+                "ollama": AsyncMock(spec=LLMProvider),
+                "claude": None,
+                "openai": mock_openai,
+                "gemini": None,
+            }
+        )
         settings = _make_settings(llm_provider="ollama")
 
         result = await resolve_query_llm(registry, settings)
@@ -69,12 +71,14 @@ class TestResolveQueryLlm:
     @pytest.mark.asyncio
     async def test_falls_back_to_non_default_provider(self):
         mock_gemini = AsyncMock(spec=LLMProvider)
-        registry = _make_registry({
-            "claude": None,
-            "openai": None,
-            "gemini": mock_gemini,
-            "ollama": AsyncMock(spec=LLMProvider),
-        })
+        registry = _make_registry(
+            {
+                "claude": None,
+                "openai": None,
+                "gemini": mock_gemini,
+                "ollama": AsyncMock(spec=LLMProvider),
+            }
+        )
         settings = _make_settings(llm_provider="claude")
 
         result = await resolve_query_llm(registry, settings)
@@ -83,12 +87,14 @@ class TestResolveQueryLlm:
     @pytest.mark.asyncio
     async def test_falls_back_to_ollama_when_reachable(self):
         mock_ollama = AsyncMock(spec=LLMProvider)
-        registry = _make_registry({
-            "claude": None,
-            "openai": None,
-            "gemini": None,
-            "ollama": mock_ollama,
-        })
+        registry = _make_registry(
+            {
+                "claude": None,
+                "openai": None,
+                "gemini": None,
+                "ollama": mock_ollama,
+            }
+        )
         settings = _make_settings(llm_provider="claude")
 
         with patch(
@@ -101,12 +107,14 @@ class TestResolveQueryLlm:
 
     @pytest.mark.asyncio
     async def test_returns_none_when_ollama_unreachable(self):
-        registry = _make_registry({
-            "claude": None,
-            "openai": None,
-            "gemini": None,
-            "ollama": AsyncMock(spec=LLMProvider),
-        })
+        registry = _make_registry(
+            {
+                "claude": None,
+                "openai": None,
+                "gemini": None,
+                "ollama": AsyncMock(spec=LLMProvider),
+            }
+        )
         settings = _make_settings(llm_provider="claude")
 
         with patch(
@@ -119,12 +127,14 @@ class TestResolveQueryLlm:
 
     @pytest.mark.asyncio
     async def test_returns_none_when_nothing_available(self):
-        registry = _make_registry({
-            "claude": None,
-            "openai": None,
-            "gemini": None,
-            "ollama": None,
-        })
+        registry = _make_registry(
+            {
+                "claude": None,
+                "openai": None,
+                "gemini": None,
+                "ollama": None,
+            }
+        )
         settings = _make_settings(llm_provider="claude")
         result = await resolve_query_llm(registry, settings)
         assert result is None
@@ -159,12 +169,14 @@ class TestTtlCaching:
 
     @pytest.mark.asyncio
     async def test_caches_none_result(self):
-        registry = _make_registry({
-            "claude": None,
-            "openai": None,
-            "gemini": None,
-            "ollama": None,
-        })
+        registry = _make_registry(
+            {
+                "claude": None,
+                "openai": None,
+                "gemini": None,
+                "ollama": None,
+            }
+        )
         settings = _make_settings(llm_provider="claude")
 
         result1 = await resolve_query_llm(registry, settings)

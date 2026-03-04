@@ -15,9 +15,7 @@ from app.services.reranker import (
 
 class TestRerankerModelConfig:
     def test_frozen_dataclass(self):
-        config = RerankerModelConfig(
-            model_name="test-model", device="cpu", max_length=512
-        )
+        config = RerankerModelConfig(model_name="test-model", device="cpu", max_length=512)
         assert config.model_name == "test-model"
         assert config.device == "cpu"
         assert config.max_length == 512

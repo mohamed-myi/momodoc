@@ -1,6 +1,5 @@
 """Tests for the exclude_unset partial update pattern (Issue #24)."""
 
-
 from app.schemas.project import ProjectUpdate
 from app.schemas.note import NoteUpdate
 from app.schemas.issue import IssueUpdate

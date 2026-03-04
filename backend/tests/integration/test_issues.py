@@ -93,9 +93,7 @@ class TestIssueDelete:
         proj = await client.post("/api/v1/projects", json={"name": "del-issue"})
         pid = proj.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "To delete"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "To delete"})
         iid = issue.json()["id"]
 
         resp = await client.delete(f"/api/v1/projects/{pid}/issues/{iid}")
@@ -124,9 +122,7 @@ class TestIssueDelete:
         proj_b = await client.post("/api/v1/projects", json={"name": "del-proj-b"})
         pid_b = proj_b.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid_a}/issues", json={"title": "In A"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid_a}/issues", json={"title": "In A"})
         iid = issue.json()["id"]
 
         # Try to delete using project B
@@ -145,13 +141,9 @@ class TestIssueFiltering:
 
         # Create one open and one done issue
         await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Open one"})
-        issue2 = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Done one"}
-        )
+        issue2 = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Done one"})
         iid2 = issue2.json()["id"]
-        await client.patch(
-            f"/api/v1/projects/{pid}/issues/{iid2}", json={"status": "done"}
-        )
+        await client.patch(f"/api/v1/projects/{pid}/issues/{iid2}", json={"status": "done"})
 
         resp = await client.get(f"/api/v1/projects/{pid}/issues?status=open")
         assert resp.status_code == 200
@@ -166,13 +158,9 @@ class TestIssueFiltering:
         proj = await client.post("/api/v1/projects", json={"name": "filter-done"})
         pid = proj.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Will be done"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Will be done"})
         iid = issue.json()["id"]
-        await client.patch(
-            f"/api/v1/projects/{pid}/issues/{iid}", json={"status": "done"}
-        )
+        await client.patch(f"/api/v1/projects/{pid}/issues/{iid}", json={"status": "done"})
         # Leave another as open
         await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Still open"})
 
@@ -188,13 +176,9 @@ class TestIssueFiltering:
         proj = await client.post("/api/v1/projects", json={"name": "filter-ip"})
         pid = proj.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Working on it"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Working on it"})
         iid = issue.json()["id"]
-        await client.patch(
-            f"/api/v1/projects/{pid}/issues/{iid}", json={"status": "in_progress"}
-        )
+        await client.patch(f"/api/v1/projects/{pid}/issues/{iid}", json={"status": "in_progress"})
 
         resp = await client.get(f"/api/v1/projects/{pid}/issues?status=in_progress")
         assert resp.status_code == 200
@@ -223,9 +207,7 @@ class TestIssueValidation:
         proj = await client.post("/api/v1/projects", json={"name": "val-empty"})
         pid = proj.json()["id"]
 
-        resp = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": ""}
-        )
+        resp = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": ""})
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
@@ -235,9 +217,7 @@ class TestIssueValidation:
         pid = proj.json()["id"]
 
         long_title = "x" * 513
-        resp = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": long_title}
-        )
+        resp = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": long_title})
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
@@ -247,9 +227,7 @@ class TestIssueValidation:
         pid = proj.json()["id"]
 
         max_title = "a" * 512
-        resp = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": max_title}
-        )
+        resp = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": max_title})
         assert resp.status_code == 201
         assert resp.json()["title"] == max_title
 
@@ -271,9 +249,7 @@ class TestIssueValidation:
         proj = await client.post("/api/v1/projects", json={"name": "val-status"})
         pid = proj.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Bad status"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Bad status"})
         iid = issue.json()["id"]
 
         resp = await client.patch(
@@ -305,9 +281,7 @@ class TestIssueValidation:
         proj = await client.post("/api/v1/projects", json={"name": "val-default"})
         pid = proj.json()["id"]
 
-        resp = await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Defaulted"}
-        )
+        resp = await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Defaulted"})
         assert resp.status_code == 201
         assert resp.json()["priority"] == "medium"
 
@@ -329,9 +303,7 @@ class TestIssueValidation:
     async def test_issue_in_nonexistent_project_404(self, client):
         """POST /issues for a nonexistent project should return 404."""
         fake_pid = str(uuid.uuid4())
-        resp = await client.post(
-            f"/api/v1/projects/{fake_pid}/issues", json={"title": "Orphan"}
-        )
+        resp = await client.post(f"/api/v1/projects/{fake_pid}/issues", json={"title": "Orphan"})
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -342,9 +314,7 @@ class TestIssueValidation:
         proj_b = await client.post("/api/v1/projects", json={"name": "xproj-b"})
         pid_b = proj_b.json()["id"]
 
-        issue = await client.post(
-            f"/api/v1/projects/{pid_a}/issues", json={"title": "In A"}
-        )
+        issue = await client.post(f"/api/v1/projects/{pid_a}/issues", json={"title": "In A"})
         iid = issue.json()["id"]
 
         # Try to update via project B
@@ -365,9 +335,7 @@ class TestIssuePagination:
         pid = proj.json()["id"]
 
         for i in range(5):
-            await client.post(
-                f"/api/v1/projects/{pid}/issues", json={"title": f"Issue {i}"}
-            )
+            await client.post(f"/api/v1/projects/{pid}/issues", json={"title": f"Issue {i}"})
 
         resp = await client.get(f"/api/v1/projects/{pid}/issues?limit=3")
         assert resp.status_code == 200
@@ -380,9 +348,7 @@ class TestIssuePagination:
         pid = proj.json()["id"]
 
         for i in range(5):
-            await client.post(
-                f"/api/v1/projects/{pid}/issues", json={"title": f"Issue {i}"}
-            )
+            await client.post(f"/api/v1/projects/{pid}/issues", json={"title": f"Issue {i}"})
 
         resp = await client.get(f"/api/v1/projects/{pid}/issues?offset=3")
         assert resp.status_code == 200
@@ -394,9 +360,7 @@ class TestIssuePagination:
         proj = await client.post("/api/v1/projects", json={"name": "issue-far"})
         pid = proj.json()["id"]
 
-        await client.post(
-            f"/api/v1/projects/{pid}/issues", json={"title": "Only one"}
-        )
+        await client.post(f"/api/v1/projects/{pid}/issues", json={"title": "Only one"})
 
         resp = await client.get(f"/api/v1/projects/{pid}/issues?offset=100")
         assert resp.status_code == 200
@@ -446,8 +410,15 @@ class TestIssueResponseStructure:
         assert resp.status_code == 201
         data = resp.json()
         expected_fields = {
-            "id", "project_id", "title", "description",
-            "status", "priority", "chunk_count", "created_at", "updated_at",
+            "id",
+            "project_id",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "chunk_count",
+            "created_at",
+            "updated_at",
         }
         assert expected_fields == set(data.keys())
         assert data["project_id"] == pid

@@ -21,8 +21,14 @@ from app.core.exceptions import (
 from app.core.security import validate_index_path
 from app.core.vectordb import VectorStore
 from app.dependencies import (
-    get_db, get_embedder, get_file_watcher, get_job_tracker,
-    get_llm_provider, get_settings, get_vectordb, get_ws_manager,
+    get_db,
+    get_embedder,
+    get_file_watcher,
+    get_job_tracker,
+    get_llm_provider,
+    get_settings,
+    get_vectordb,
+    get_ws_manager,
 )
 from app.main import create_app
 from app.models.project import Project
@@ -165,10 +171,10 @@ class TestSettings:
         """Port validation rejects values outside 1-65535 range."""
         with pytest.raises(ValueError, match="Port must be between"):
             Settings(port=0, momodoc_data_dir=str(tmp_path / "data"))
-        
+
         with pytest.raises(ValueError, match="Port must be between"):
             Settings(port=-1, momodoc_data_dir=str(tmp_path / "data"))
-        
+
         with pytest.raises(ValueError, match="Port must be between"):
             Settings(port=65536, momodoc_data_dir=str(tmp_path / "data"))
 
@@ -176,10 +182,10 @@ class TestSettings:
         """Valid port values should be accepted."""
         s1 = Settings(port=1, momodoc_data_dir=str(tmp_path / "data1"))
         assert s1.port == 1
-        
+
         s2 = Settings(port=8000, momodoc_data_dir=str(tmp_path / "data2"))
         assert s2.port == 8000
-        
+
         s3 = Settings(port=65535, momodoc_data_dir=str(tmp_path / "data3"))
         assert s3.port == 65535
 
@@ -265,18 +271,30 @@ class TestVectorStoreEdgeCases:
         assert len(results) == 1
         r = results[0]
         expected_fields = {
-            "id", "vector", "project_id", "source_type", "source_id",
-            "filename", "original_path", "file_type", "chunk_index",
-            "chunk_text", "language", "tags", "_distance",
+            "id",
+            "vector",
+            "project_id",
+            "source_type",
+            "source_id",
+            "filename",
+            "original_path",
+            "file_type",
+            "chunk_index",
+            "chunk_text",
+            "language",
+            "tags",
+            "_distance",
         }
         assert expected_fields.issubset(set(r.keys()))
 
     def test_delete_all_records_with_broad_filter(self, vectordb):
         """Deleting with a filter that matches all records should empty the table."""
-        vectordb.add([
-            _make_record(project_id="p1", source_id="s1"),
-            _make_record(project_id="p1", source_id="s2"),
-        ])
+        vectordb.add(
+            [
+                _make_record(project_id="p1", source_id="s1"),
+                _make_record(project_id="p1", source_id="s2"),
+            ]
+        )
         vectordb.delete("project_id = 'p1'")
         results = vectordb.search([1.0, 0.0, 0.0, 0.0], limit=10)
         assert len(results) == 0
@@ -290,10 +308,12 @@ class TestVectorStoreEdgeCases:
 
     def test_add_then_search_different_vectors(self, vectordb):
         """Records with different vectors should return in order of distance."""
-        vectordb.add([
-            _make_record(source_id="close", vector=[1.0, 0.0, 0.0, 0.0]),
-            _make_record(source_id="far", vector=[0.0, 0.0, 0.0, 1.0]),
-        ])
+        vectordb.add(
+            [
+                _make_record(source_id="close", vector=[1.0, 0.0, 0.0, 0.0]),
+                _make_record(source_id="far", vector=[0.0, 0.0, 0.0, 1.0]),
+            ]
+        )
         results = vectordb.search([1.0, 0.0, 0.0, 0.0], limit=2)
         assert len(results) == 2
         # The closer vector should come first
@@ -316,7 +336,7 @@ class TestVectorStoreEdgeCases:
         vectordb.add([_make_record()])
         with pytest.raises(VectorStoreError, match="non-empty filter"):
             vectordb.delete("")
-        
+
         with pytest.raises(VectorStoreError, match="non-empty filter"):
             vectordb.delete("   ")  # whitespace-only
 
@@ -326,7 +346,7 @@ class TestSecurityEdgeCases:
         """FIXED: Empty or whitespace-only path now explicitly rejected."""
         with pytest.raises(ValidationError, match="Path must not be empty"):
             validate_index_path("", ["/allowed"])
-        
+
         with pytest.raises(ValidationError, match="Path must not be empty"):
             validate_index_path("   ", ["/allowed"])
 
@@ -380,7 +400,9 @@ class TestSecurityEdgeCases:
         real_dir = tmp_path / "real"
         real_dir.mkdir()
 
-        with pytest.raises(ValidationError, match="None of the allowed index paths could be resolved"):
+        with pytest.raises(
+            ValidationError, match="None of the allowed index paths could be resolved"
+        ):
             validate_index_path(
                 str(real_dir),
                 ["/nonexistent/path/1", "/nonexistent/path/2"],
@@ -395,7 +417,9 @@ class TestSecurityEdgeCases:
 
         # The allowlist entry resolves, but it is not a directory, so no valid
         # sandbox roots remain.
-        with pytest.raises(ValidationError, match="None of the allowed index paths could be resolved"):
+        with pytest.raises(
+            ValidationError, match="None of the allowed index paths could be resolved"
+        ):
             validate_index_path(str(real_dir), [str(allowed_file)])
 
     def test_dot_path_resolves_to_cwd(self, tmp_path):
@@ -597,9 +621,7 @@ class TestMiddlewareAdditionalEdgeCases:
     async def test_trailing_slash_health_skips_auth(self, _make_middleware_app):
         """FIXED: '/api/v1/health/' now normalized to '/api/v1/health', skips auth."""
         app = _make_middleware_app("my-token")
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/v1/health/")
         # After normalization, trailing slash is stripped and path matches skip set
         assert resp.status_code == 200
@@ -607,18 +629,14 @@ class TestMiddlewareAdditionalEdgeCases:
     async def test_healthcheck_subpath_requires_auth(self, _make_middleware_app):
         """/api/v1/healthcheck is a different path from /api/v1/health — requires auth."""
         app = _make_middleware_app("my-token")
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/v1/healthcheck")
         assert resp.status_code == 401
 
     async def test_case_sensitive_token_header(self, _make_middleware_app):
         """Token header name is case-insensitive per HTTP spec (handled by Starlette)."""
         app = _make_middleware_app("my-token")
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get(
                 "/api/v1/things",
                 headers={"x-momodoc-token": "my-token"},
@@ -629,9 +647,7 @@ class TestMiddlewareAdditionalEdgeCases:
     async def test_very_long_token_rejected(self, _make_middleware_app):
         """An extremely long token value should not cause issues."""
         app = _make_middleware_app("short-token")
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get(
                 "/api/v1/things",
                 headers={"X-Momodoc-Token": "x" * 100000},
@@ -644,8 +660,15 @@ class TestExceptionHandlers:
 
     @pytest_asyncio.fixture
     async def app_client(
-        self, db_session, mock_vectordb, mock_embedder, mock_llm,
-        mock_job_tracker, mock_ws_manager, mock_file_watcher, test_settings,
+        self,
+        db_session,
+        mock_vectordb,
+        mock_embedder,
+        mock_llm,
+        mock_job_tracker,
+        mock_ws_manager,
+        mock_file_watcher,
+        test_settings,
     ):
         """Create a test client with dependency overrides."""
         app = create_app()
@@ -723,6 +746,7 @@ class TestCreateApp:
     def test_creates_fastapi_instance(self):
         """create_app should return a FastAPI app."""
         from fastapi import FastAPI
+
         app = create_app()
         assert isinstance(app, FastAPI)
         assert app.title == "momodoc"

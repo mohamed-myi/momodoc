@@ -5,6 +5,7 @@ Revises: 001
 Create Date: 2026-02-07
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -19,9 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table("projects") as batch_op:
-        batch_op.add_column(
-            sa.Column("source_directory", sa.String(1024), nullable=True)
-        )
+        batch_op.add_column(sa.Column("source_directory", sa.String(1024), nullable=True))
 
 
 def downgrade() -> None:

@@ -35,9 +35,7 @@ def init_db(
         pool_recycle=pool_recycle,
         pool_pre_ping=pool_pre_ping,
     )
-    async_session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
 
 

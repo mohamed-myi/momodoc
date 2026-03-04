@@ -402,15 +402,9 @@ async def lifespan(app: FastAPI):
             from app.models.issue import Issue
             from app.models.note import Note
 
-            await session.execute(
-                File.__table__.update().values(chunk_count=0)
-            )
-            await session.execute(
-                Note.__table__.update().values(chunk_count=0)
-            )
-            await session.execute(
-                Issue.__table__.update().values(chunk_count=0)
-            )
+            await session.execute(File.__table__.update().values(chunk_count=0))
+            await session.execute(Note.__table__.update().values(chunk_count=0))
+            await session.execute(Issue.__table__.update().values(chunk_count=0))
             await session.commit()
             logger.info("Reset chunk_count to 0 across files, notes, and issues")
 

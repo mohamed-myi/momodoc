@@ -103,9 +103,7 @@ def _select_context_sources(
         used += _estimate_tokens(msg.content) + 10
 
     if used >= budget:
-        logger.info(
-            "Prompt budget exhausted before adding sources; omitting retrieved context"
-        )
+        logger.info("Prompt budget exhausted before adding sources; omitting retrieved context")
         return []
 
     selected: list[ChatSource] = []
@@ -186,7 +184,9 @@ async def _retrieve_context(
     plan = plan_query(query, llm_available=query_llm is not None)
     logger.info(
         "Chat query pipeline: type=%s hyde=%s decompose=%s",
-        plan.query_type.value, plan.use_hyde, plan.decompose,
+        plan.query_type.value,
+        plan.use_hyde,
+        plan.decompose,
     )
 
     pinned_sources: list[ChatSource] = []
@@ -246,15 +246,17 @@ async def _retrieve_context(
 
         sub_queries = await decompose_query(query, query_llm)
         results = await execute_decomposed_search(
-            sub_queries, embedder, vectordb, filter_str,
-            top_k_per_query=retrieval_limit, final_top_k=retrieval_limit,
+            sub_queries,
+            embedder,
+            vectordb,
+            filter_str,
+            top_k_per_query=retrieval_limit,
+            final_top_k=retrieval_limit,
         )
         plan = dataclasses.replace(plan, sub_queries=tuple(sub_queries))
     else:
         query_vector = await embedder.aembed_single(query)
-        results = await vectordb.hybrid_search(
-            query_vector, query, filter_str, retrieval_limit
-        )
+        results = await vectordb.hybrid_search(query_vector, query, filter_str, retrieval_limit)
 
     retrieval_ms = (time.monotonic() - retrieval_start) * 1000
 
@@ -319,14 +321,10 @@ def _build_messages(
             context_parts.append(f"[Source {i}: {label}]\n{source.chunk_text}")
         context_str = "\n\n---\n\n".join(context_parts)
 
-        user_content = (
-            f"Context from project:\n\n{context_str}\n\n"
-            f"---\n\nQuestion: {user_query}"
-        )
+        user_content = f"Context from project:\n\n{context_str}\n\n---\n\nQuestion: {user_query}"
     else:
         user_content = (
-            f"No relevant context was found in the project data.\n\n"
-            f"Question: {user_query}"
+            f"No relevant context was found in the project data.\n\nQuestion: {user_query}"
         )
 
     messages.append(LLMMessage(role="user", content=user_content))

@@ -54,9 +54,7 @@ class TestCreateLLMProvider:
 
     def test_claude_returns_provider_with_api_key(self):
         """Claude provider should return a ClaudeProvider when API key is present."""
-        settings = _make_settings(
-            llm_provider="claude", anthropic_api_key="sk-ant-test-key"
-        )
+        settings = _make_settings(llm_provider="claude", anthropic_api_key="sk-ant-test-key")
         provider = create_llm_provider(settings)
         assert provider is not None
         from app.llm.claude import ClaudeProvider
@@ -65,9 +63,7 @@ class TestCreateLLMProvider:
 
     def test_openai_returns_provider_with_api_key(self):
         """OpenAI provider should return an OpenAIProvider when API key is present."""
-        settings = _make_settings(
-            llm_provider="openai", openai_api_key="sk-test-key"
-        )
+        settings = _make_settings(llm_provider="openai", openai_api_key="sk-test-key")
         provider = create_llm_provider(settings)
         assert provider is not None
         from app.llm.openai_provider import OpenAIProvider
@@ -76,9 +72,7 @@ class TestCreateLLMProvider:
 
     def test_gemini_returns_provider_with_api_key(self):
         """Gemini provider should return a GeminiProvider when API key is present."""
-        settings = _make_settings(
-            llm_provider="gemini", google_api_key="test-google-key"
-        )
+        settings = _make_settings(llm_provider="gemini", google_api_key="test-google-key")
         provider = create_llm_provider(settings)
         assert provider is not None
         from app.llm.gemini_provider import GeminiProvider
@@ -296,7 +290,9 @@ class TestLLMErrorWrapping:
         mock_request = MagicMock()
         api_error = openai.APIError("API failed", request=mock_request, body=None)
 
-        with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.side_effect = api_error
 
             with pytest.raises(LLMError, match="OpenAI API error"):
@@ -314,7 +310,9 @@ class TestLLMErrorWrapping:
         mock_response = MagicMock()
         mock_response.choices = []
 
-        with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             with pytest.raises(LLMError, match="no choices"):
@@ -334,7 +332,9 @@ class TestLLMErrorWrapping:
         mock_request = MagicMock()
         api_error = anthropic.APIError("API failed", request=mock_request, body=None)
 
-        with patch.object(provider.client.messages, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider.client.messages, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.side_effect = api_error
 
             with pytest.raises(LLMError, match="Claude API error"):

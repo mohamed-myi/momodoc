@@ -10,9 +10,7 @@ from app.core.database import Base
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_directory: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -33,6 +31,4 @@ class Project(Base):
     chat_sessions = relationship(
         "ChatSession", back_populates="project", cascade="all, delete-orphan"
     )
-    sync_jobs = relationship(
-        "SyncJob", back_populates="project", cascade="all, delete-orphan"
-    )
+    sync_jobs = relationship("SyncJob", back_populates="project", cascade="all, delete-orphan")

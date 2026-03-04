@@ -123,20 +123,20 @@ async def _process_single_file(
                 await job_tracker.atomic_increment(
                     err_db, job_id, failed_files=1, processed_files=1
                 )
-                await job_tracker.add_error(
-                    err_db, job_id, os.path.basename(full_path), str(e)
-                )
+                await job_tracker.add_error(err_db, job_id, os.path.basename(full_path), str(e))
             processed_files, total_files = await progress.mark_processed()
             if ws_manager is not None:
-                await ws_manager.broadcast({
-                    "type": "sync_progress",
-                    "job_id": job_id,
-                    "project_id": project_id,
-                    "processed_files": processed_files,
-                    "completed_files": processed_files,
-                    "total_files": total_files,
-                    "current_file": os.path.basename(full_path),
-                })
+                await ws_manager.broadcast(
+                    {
+                        "type": "sync_progress",
+                        "job_id": job_id,
+                        "project_id": project_id,
+                        "processed_files": processed_files,
+                        "completed_files": processed_files,
+                        "total_files": total_files,
+                        "current_file": os.path.basename(full_path),
+                    }
+                )
             return None
 
     logger.info(
@@ -154,9 +154,7 @@ async def _process_single_file(
         if result.skipped:
             await job_tracker.atomic_increment(db, job_id, skipped_files=1)
         elif result.chunks_created:
-            await job_tracker.atomic_increment(
-                db, job_id, total_chunks=result.chunks_created
-            )
+            await job_tracker.atomic_increment(db, job_id, total_chunks=result.chunks_created)
 
         if result.errors:
             await job_tracker.atomic_increment(db, job_id, failed_files=1)
@@ -167,15 +165,17 @@ async def _process_single_file(
 
     # Broadcast progress via WebSocket
     if ws_manager is not None:
-        await ws_manager.broadcast({
-            "type": "sync_progress",
-            "job_id": job_id,
-            "project_id": project_id,
-            "processed_files": processed_files,
-            "completed_files": processed_files,
-            "total_files": total_files,
-            "current_file": os.path.basename(full_path),
-        })
+        await ws_manager.broadcast(
+            {
+                "type": "sync_progress",
+                "job_id": job_id,
+                "project_id": project_id,
+                "processed_files": processed_files,
+                "completed_files": processed_files,
+                "total_files": total_files,
+                "current_file": os.path.basename(full_path),
+            }
+        )
 
     return full_path
 
@@ -270,12 +270,8 @@ async def _complete_sync_job(
     directory_path: str,
 ) -> None:
     async with db_module.async_session_factory() as db:
-        await job_tracker.update_progress(
-            db, job_id, current_file=""
-        )
-        await _cleanup_deleted_files(
-            db, vectordb, project_id, directory_path, seen_paths=None
-        )
+        await job_tracker.update_progress(db, job_id, current_file="")
+        await _cleanup_deleted_files(db, vectordb, project_id, directory_path, seen_paths=None)
         await job_tracker.complete_job(db, job_id)
         await db.commit()
 
@@ -306,9 +302,7 @@ async def run_sync_job(
         queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=queue_size)
         progress = _SyncProgress(total_files=0)
         discovery_batch_size = (
-            settings.index_discovery_batch_size
-            if settings
-            else _DEFAULT_DISCOVERY_BATCH_SIZE
+            settings.index_discovery_batch_size if settings else _DEFAULT_DISCOVERY_BATCH_SIZE
         )
         worker_tasks = [
             asyncio.create_task(
@@ -360,16 +354,22 @@ async def run_sync_job(
         duration = time.monotonic() - job_start
         logger.info(
             "Sync job %s completed: %d/%d succeeded, %d failed (%.1fs)",
-            job_id, succeeded, total_discovered, failed, duration,
+            job_id,
+            succeeded,
+            total_discovered,
+            failed,
+            duration,
         )
 
         # Broadcast sync completion via WebSocket
         if ws_manager is not None:
-            await ws_manager.broadcast({
-                "type": "sync_complete",
-                "job_id": job_id,
-                "project_id": project_id,
-            })
+            await ws_manager.broadcast(
+                {
+                    "type": "sync_complete",
+                    "job_id": job_id,
+                    "project_id": project_id,
+                }
+            )
 
     except Exception as e:
         duration = time.monotonic() - job_start
@@ -386,12 +386,14 @@ async def run_sync_job(
         # Broadcast sync failure via WebSocket
         if ws_manager is not None:
             try:
-                await ws_manager.broadcast({
-                    "type": "sync_failed",
-                    "job_id": job_id,
-                    "project_id": project_id,
-                    "error": str(e),
-                })
+                await ws_manager.broadcast(
+                    {
+                        "type": "sync_failed",
+                        "job_id": job_id,
+                        "project_id": project_id,
+                        "error": str(e),
+                    }
+                )
             except Exception:
                 logger.warning("Failed to broadcast sync failure for job %s", job_id)
     finally:
@@ -424,7 +426,9 @@ async def ingest_single_file(
     else:
         logger.info(
             "File watcher ingested %s: %d chunks (skipped=%s)",
-            os.path.basename(file_path), result.chunks_created, result.skipped,
+            os.path.basename(file_path),
+            result.chunks_created,
+            result.skipped,
         )
 
 
@@ -473,7 +477,8 @@ async def trigger_project_sync(
     if not os.path.isdir(source_directory):
         logger.warning(
             "Cannot sync project %s: directory '%s' does not exist",
-            project_id, source_directory,
+            project_id,
+            source_directory,
         )
         return None
 
@@ -508,9 +513,7 @@ async def _update_project_sync_status(project_id: str, status: str) -> None:
     """Update the project's last_sync_at and last_sync_status."""
     try:
         async with db_module.async_session_factory() as db:
-            result = await db.execute(
-                select(Project).where(Project.id == project_id)
-            )
+            result = await db.execute(select(Project).where(Project.id == project_id))
             project = result.scalar_one_or_none()
             if project:
                 project.last_sync_at = datetime.now(timezone.utc)
@@ -545,9 +548,7 @@ async def _cleanup_deleted_files(
     file_rows = result.all()
     sync_root = os.path.realpath(directory_path)
     normalized_seen_paths = (
-        {os.path.realpath(path) for path in seen_paths}
-        if seen_paths is not None
-        else None
+        {os.path.realpath(path) for path in seen_paths} if seen_paths is not None else None
     )
 
     for file_id, original_path in file_rows:

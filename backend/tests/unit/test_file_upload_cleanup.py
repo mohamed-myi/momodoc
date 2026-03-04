@@ -25,7 +25,7 @@ class TestUploadCleanupOnError:
                 chunk = data[offset:]
                 offset = len(data)
             else:
-                chunk = data[offset:offset + size]
+                chunk = data[offset : offset + size]
                 offset += size
             return chunk
 

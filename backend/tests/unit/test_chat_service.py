@@ -144,12 +144,22 @@ class TestBuildMessages:
         """Multiple sources should be separated by --- dividers."""
         sources = [
             ChatSource(
-                source_type="file", source_id="f1", filename="a.py",
-                original_path=None, chunk_text="content A", chunk_index=0, score=0.9,
+                source_type="file",
+                source_id="f1",
+                filename="a.py",
+                original_path=None,
+                chunk_text="content A",
+                chunk_index=0,
+                score=0.9,
             ),
             ChatSource(
-                source_type="file", source_id="f2", filename="b.py",
-                original_path=None, chunk_text="content B", chunk_index=0, score=0.8,
+                source_type="file",
+                source_id="f2",
+                filename="b.py",
+                original_path=None,
+                chunk_text="content B",
+                chunk_index=0,
+                score=0.8,
             ),
         ]
         messages = _build_messages([], sources, "query")
@@ -182,9 +192,7 @@ class TestRetrieveContext:
     async def test_project_filter_applied(self, mock_vectordb, mock_embedder):
         """When project_id is provided, hybrid_search should include project filter."""
         test_uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-        await _retrieve_context(
-            mock_vectordb, mock_embedder, test_uuid, "query", 10
-        )
+        await _retrieve_context(mock_vectordb, mock_embedder, test_uuid, "query", 10)
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][2] == f"project_id = '{test_uuid}'"
 
@@ -207,9 +215,7 @@ class TestRetrieveContext:
         assert call_args.kwargs["limit"] == MAX_PINNED_CHUNKS_PER_SOURCE
 
     @pytest.mark.asyncio
-    async def test_duplicate_pinned_source_ids_are_deduplicated(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_duplicate_pinned_source_ids_are_deduplicated(self, mock_vectordb, mock_embedder):
         source_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         mock_vectordb.get_by_filter.return_value = []
         await _retrieve_context(
@@ -223,9 +229,7 @@ class TestRetrieveContext:
         assert mock_vectordb.get_by_filter.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_invalid_pinned_source_ids_are_skipped(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_invalid_pinned_source_ids_are_skipped(self, mock_vectordb, mock_embedder):
         mock_vectordb.get_by_filter.return_value = []
         sources, _meta = await _retrieve_context(
             mock_vectordb,
@@ -241,27 +245,21 @@ class TestRetrieveContext:
     @pytest.mark.asyncio
     async def test_no_project_filter_when_none(self, mock_vectordb, mock_embedder):
         """When project_id is None (global), hybrid_search should have no filter."""
-        await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][2] is None
 
     @pytest.mark.asyncio
     async def test_top_k_forwarded(self, mock_vectordb, mock_embedder):
         """The top_k parameter should be forwarded to vectordb.hybrid_search."""
-        await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 5
-        )
+        await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 5)
         call_args = mock_vectordb.hybrid_search.call_args
         assert call_args[0][3] == 5
 
     @pytest.mark.asyncio
     async def test_empty_results_returns_empty_list(self, mock_vectordb, mock_embedder):
         """Empty vectordb results should produce empty ChatSource list."""
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert sources == []
 
     @pytest.mark.asyncio
@@ -278,9 +276,7 @@ class TestRetrieveContext:
                 "_relevance_score": 0.7,
             }
         ]
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert len(sources) == 1
         assert sources[0].source_type == "file"
         assert sources[0].filename == "test.py"
@@ -300,16 +296,12 @@ class TestRetrieveContext:
                 "_relevance_score": 0.9,
             }
         ]
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert sources[0].filename is None
         assert sources[0].original_path is None
 
     @pytest.mark.asyncio
-    async def test_missing_relevance_score_defaults_to_zero(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_missing_relevance_score_defaults_to_zero(self, mock_vectordb, mock_embedder):
         """If _relevance_score is missing, score should default to 0.0."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -321,15 +313,11 @@ class TestRetrieveContext:
                 "chunk_index": 0,
             }
         ]
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert sources[0].score == 0.0
 
     @pytest.mark.asyncio
-    async def test_relevance_score_clamped_to_one(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_relevance_score_clamped_to_one(self, mock_vectordb, mock_embedder):
         """Relevance score > 1.0 is clamped to 1.0."""
         mock_vectordb.hybrid_search.return_value = [
             {
@@ -342,9 +330,7 @@ class TestRetrieveContext:
                 "_relevance_score": 2.5,
             }
         ]
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert sources[0].score == 1.0
 
     @pytest.mark.asyncio
@@ -362,17 +348,13 @@ class TestRetrieveContext:
                 "_distance": 0.25,
             }
         ]
-        sources, _meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        sources, _meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert sources[0].score == pytest.approx(0.8)
 
     @pytest.mark.asyncio
     async def test_retrieval_metadata_returned(self, mock_vectordb, mock_embedder):
         """_retrieve_context should return retrieval_metadata with plan info."""
-        _sources, meta = await _retrieve_context(
-            mock_vectordb, mock_embedder, None, "query", 10
-        )
+        _sources, meta = await _retrieve_context(mock_vectordb, mock_embedder, None, "query", 10)
         assert meta is not None
         assert "query_plan" in meta
         assert "candidates_fetched" in meta
@@ -456,12 +438,8 @@ class TestRetrieveContextWithReranker:
         reranker = MagicMock(spec=Reranker)
 
         async def _arerank(query, documents, top_k=10):
-            ranked = sorted(
-                enumerate(documents), key=lambda x: len(x[1]), reverse=True
-            )
-            return [
-                (idx, 1.0 - i * 0.1) for i, (idx, _) in enumerate(ranked[:top_k])
-            ]
+            ranked = sorted(enumerate(documents), key=lambda x: len(x[1]), reverse=True)
+            return [(idx, 1.0 - i * 0.1) for i, (idx, _) in enumerate(ranked[:top_k])]
 
         reranker.arerank = AsyncMock(side_effect=_arerank)
         return reranker
@@ -525,9 +503,7 @@ class TestRetrieveContextWithReranker:
         assert sources[1].source_id == "f1"
 
     @pytest.mark.asyncio
-    async def test_pinned_sources_not_reranked(
-        self, mock_vectordb, mock_embedder, mock_reranker
-    ):
+    async def test_pinned_sources_not_reranked(self, mock_vectordb, mock_embedder, mock_reranker):
         """Pinned sources should retain score=1.0 and not be passed to reranker."""
         pinned_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         mock_vectordb.get_by_filter.return_value = [
@@ -684,9 +660,7 @@ class TestSectionHeaderInContext:
         messages = _build_messages([], sources, "what is this?")
         user_msg = messages[-1].content
         assert "[Source 1: readme.md]" in user_msg
-        assert ">" not in user_msg.split("[Source 1:")[1].split("]")[0].replace(
-            "readme.md", ""
-        )
+        assert ">" not in user_msg.split("[Source 1:")[1].split("]")[0].replace("readme.md", "")
 
     def test_note_with_section_header(self):
         """Note sources (no filename) should show 'Note > breadcrumb'."""

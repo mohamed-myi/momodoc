@@ -84,9 +84,7 @@ class GeminiProvider(LLMProvider):
     def get_model_name(self) -> str:
         return self.model_name
 
-    def _build_contents(
-        self, messages: list[LLMMessage]
-    ) -> tuple[list[types.Content], str | None]:
+    def _build_contents(self, messages: list[LLMMessage]) -> tuple[list[types.Content], str | None]:
         """Convert LLMMessage list to Gemini's content format.
 
         Gemini uses 'user' and 'model' roles (not 'assistant').

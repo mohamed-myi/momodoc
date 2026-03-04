@@ -83,9 +83,18 @@ class TestIndexNote:
 
         # Verify all required fields are present
         required_fields = {
-            "id", "vector", "project_id", "source_type", "source_id",
-            "filename", "original_path", "file_type", "chunk_index",
-            "chunk_text", "language", "tags",
+            "id",
+            "vector",
+            "project_id",
+            "source_type",
+            "source_id",
+            "filename",
+            "original_path",
+            "file_type",
+            "chunk_index",
+            "chunk_text",
+            "language",
+            "tags",
         }
         assert set(rec.keys()) == required_fields
 
@@ -152,9 +161,7 @@ class TestIndexNote:
         assert indices == list(range(len(records)))
 
     @pytest.mark.asyncio
-    async def test_index_note_embedder_called_with_chunk_texts(
-        self, mock_vectordb, mock_embedder
-    ):
+    async def test_index_note_embedder_called_with_chunk_texts(self, mock_vectordb, mock_embedder):
         """The embedder should be called with the text from each chunk."""
         note = _make_note(content="Embed this content")
         await note_service._index_note(mock_vectordb, mock_embedder, note)

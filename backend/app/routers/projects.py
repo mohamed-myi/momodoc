@@ -53,7 +53,9 @@ async def create_project(
             resp.sync_job_id = job_id
 
         # Start watching the directory for live changes
-        _start_watcher_safe(request, project.id, data.source_directory, settings, vectordb, embedder)
+        _start_watcher_safe(
+            request, project.id, data.source_directory, settings, vectordb, embedder
+        )
 
     return resp
 
@@ -115,7 +117,12 @@ async def update_project(
             if old_source_dir:
                 file_watcher.stop_project(project_id)
             _start_watcher_safe(
-                request, project_id, new_source_dir, settings, vectordb, embedder,
+                request,
+                project_id,
+                new_source_dir,
+                settings,
+                vectordb,
+                embedder,
             )
 
     return resp
@@ -151,8 +158,12 @@ def _start_watcher_safe(
         file_watcher = getattr(request.app.state, "file_watcher", None)
         if file_watcher:
             setup_project_watcher(
-                file_watcher, project_id, source_directory,
-                settings, vectordb, embedder,
+                file_watcher,
+                project_id,
+                source_directory,
+                settings,
+                vectordb,
+                embedder,
             )
     except Exception as e:
         logger.warning("Failed to start file watcher for project %s: %s", project_id, e)

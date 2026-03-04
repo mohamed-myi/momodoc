@@ -49,9 +49,7 @@ def resolve_reranker_config(
 ) -> RerankerModelConfig:
     base = RERANKER_MODELS.get(model_name)
     if base is None:
-        logger.warning(
-            "Unknown reranker model '%s'; creating a default config", model_name
-        )
+        logger.warning("Unknown reranker model '%s'; creating a default config", model_name)
         device = device_override or "cpu"
         return RerankerModelConfig(model_name=model_name, device=device, max_length=512)
 
@@ -119,14 +117,10 @@ class Reranker:
             return await loop.run_in_executor(executor, fn, *args)
         except RuntimeError as e:
             if "cannot schedule new futures after shutdown" in str(e):
-                raise RuntimeError(
-                    "Reranker is unavailable during shutdown."
-                ) from e
+                raise RuntimeError("Reranker is unavailable during shutdown.") from e
             raise
 
-    def rerank(
-        self, query: str, documents: list[str], top_k: int = 10
-    ) -> list[tuple[int, float]]:
+    def rerank(self, query: str, documents: list[str], top_k: int = 10) -> list[tuple[int, float]]:
         """Score query-document pairs and return top_k as (original_index, score).
 
         Scores are normalized to 0..1 via sigmoid-style clamping so they can

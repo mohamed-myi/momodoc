@@ -4,7 +4,6 @@ import os
 import stat
 
 
-
 class TestTokenFilePermissions:
     """Verify the token file is written with restrictive permissions."""
 

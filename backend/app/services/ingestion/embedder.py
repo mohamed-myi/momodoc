@@ -69,9 +69,7 @@ def resolve_model_config(
     """Look up a model config and apply optional overrides."""
     base = EMBEDDING_MODELS.get(model_name)
     if base is None:
-        logger.warning(
-            "Unknown embedding model '%s'; creating a default config", model_name
-        )
+        logger.warning("Unknown embedding model '%s'; creating a default config", model_name)
         device = device_override or get_default_device()
         dim = dimension_override or 384
         return EmbeddingModelConfig(
@@ -140,9 +138,7 @@ class Embedder:
         effective_dim = dimension if dimension is not None else native_dim
         if effective_dim != native_dim and effective_dim in self._config.supported_dimensions:
             self.model.truncate_dim = effective_dim
-            logger.info(
-                "Matryoshka truncation enabled: %s -> %d dims", model_name, effective_dim
-            )
+            logger.info("Matryoshka truncation enabled: %s -> %d dims", model_name, effective_dim)
 
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
@@ -178,9 +174,7 @@ class Embedder:
             raise
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        embeddings = self.model.encode(
-            texts, normalize_embeddings=True, show_progress_bar=False
-        )
+        embeddings = self.model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
         return embeddings.tolist()
 
     def embed_texts_for_storage(self, texts: list[str]) -> list[list[float]]:
@@ -198,9 +192,7 @@ class Embedder:
     def embed_single_query(self, text: str) -> list[float]:
         result = self.embed_texts_for_query([text])
         if not result:
-            raise ValueError(
-                "Embedding model returned empty result for single text input"
-            )
+            raise ValueError("Embedding model returned empty result for single text input")
         return result[0]
 
     def embed_single(self, text: str) -> list[float]:
@@ -226,7 +218,9 @@ class Embedder:
         if not texts:
             return []
 
-        embed_fn = self.embed_texts_for_storage if mode == "document" else self.embed_texts_for_query
+        embed_fn = (
+            self.embed_texts_for_storage if mode == "document" else self.embed_texts_for_query
+        )
 
         if len(texts) <= batch_size:
             return await self._run_in_executor(embed_fn, texts)
@@ -254,6 +248,7 @@ class Embedder:
 
         try:
             from loky import get_reusable_executor
+
             loky_executor = get_reusable_executor()
             loky_executor.shutdown(wait=True, kill_workers=True)
             logger.debug("Loky executor shutdown complete")

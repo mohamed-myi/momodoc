@@ -58,9 +58,7 @@ class TestFileEndpoints:
     @pytest.mark.asyncio
     async def test_get_file(self, client, project_id, sample_file):
         """GET /files/{file_id} should return the file."""
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files/{sample_file.id}"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files/{sample_file.id}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == sample_file.id
@@ -80,9 +78,7 @@ class TestFileEndpoints:
         resp = await client.post("/api/v1/projects", json={"name": "other-project"})
         other_pid = resp.json()["id"]
 
-        resp = await client.get(
-            f"/api/v1/projects/{other_pid}/files/{sample_file.id}"
-        )
+        resp = await client.get(f"/api/v1/projects/{other_pid}/files/{sample_file.id}")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -90,9 +86,7 @@ class TestFileEndpoints:
         """DELETE /files/{file_id} should remove file and call vectordb.delete."""
         mock_vectordb.delete.reset_mock()
 
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/files/{sample_file.id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/files/{sample_file.id}")
         assert resp.status_code == 204
 
         # Verify vectordb.delete was called with the correct source_id filter
@@ -101,9 +95,7 @@ class TestFileEndpoints:
         assert f"source_id = '{sample_file.id}'" == filter_arg
 
         # Verify the file is gone
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files/{sample_file.id}"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files/{sample_file.id}")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -119,9 +111,7 @@ class TestFileEndpoints:
         resp = await client.post("/api/v1/projects", json={"name": "wrong-proj"})
         other_pid = resp.json()["id"]
 
-        resp = await client.delete(
-            f"/api/v1/projects/{other_pid}/files/{sample_file.id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{other_pid}/files/{sample_file.id}")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -150,36 +140,36 @@ class TestFileEndpoints:
         await db_session.commit()
 
         # Get first 2
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files?limit=2&offset=0"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files?limit=2&offset=0")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
         # Get next 2
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files?limit=2&offset=2"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files?limit=2&offset=2")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
         # Get remainder
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files?limit=2&offset=4"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files?limit=2&offset=4")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     @pytest.mark.asyncio
     async def test_file_response_structure(self, client, project_id, sample_file):
         """Verify FileResponse has all expected fields."""
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/files/{sample_file.id}"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/files/{sample_file.id}")
         assert resp.status_code == 200
         data = resp.json()
         expected_fields = {
-            "id", "project_id", "filename", "original_path",
-            "file_type", "file_size", "chunk_count", "tags", "indexed_at", "created_at",
+            "id",
+            "project_id",
+            "filename",
+            "original_path",
+            "file_type",
+            "file_size",
+            "chunk_count",
+            "tags",
+            "indexed_at",
+            "created_at",
         }
         assert expected_fields == set(data.keys())

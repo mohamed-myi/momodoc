@@ -99,9 +99,7 @@ class ProjectFileWatcher:
         if self._loop is None:
             self._loop = asyncio.get_event_loop()
 
-        handler = _DebouncedHandler(
-            on_change, self._loop, supported_extensions, ignore_dirs
-        )
+        handler = _DebouncedHandler(on_change, self._loop, supported_extensions, ignore_dirs)
         observer = Observer()
         observer.schedule(handler, directory, recursive=True)
         observer.daemon = True

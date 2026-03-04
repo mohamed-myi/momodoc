@@ -95,10 +95,12 @@ class TestVectorStoreSearch:
         assert results == []
 
     def test_search_with_filter(self, vectordb):
-        vectordb.add([
-            _make_record(project_id="p1", text="proj 1"),
-            _make_record(project_id="p2", text="proj 2"),
-        ])
+        vectordb.add(
+            [
+                _make_record(project_id="p1", text="proj 1"),
+                _make_record(project_id="p2", text="proj 2"),
+            ]
+        )
         results = vectordb.search(
             [1.0, 0.0, 0.0, 0.0],
             filter_str="project_id = 'p1'",
@@ -131,21 +133,25 @@ class TestVectorStoreSearch:
 
 class TestVectorStoreDelete:
     def test_delete_by_source_id(self, vectordb):
-        vectordb.add([
-            _make_record(source_id="keep", text="keep me"),
-            _make_record(source_id="remove", text="remove me"),
-        ])
+        vectordb.add(
+            [
+                _make_record(source_id="keep", text="keep me"),
+                _make_record(source_id="remove", text="remove me"),
+            ]
+        )
         vectordb.delete("source_id = 'remove'")
         results = vectordb.search([1.0, 0.0, 0.0, 0.0], limit=10)
         assert len(results) == 1
         assert results[0]["source_id"] == "keep"
 
     def test_delete_by_project_id(self, vectordb):
-        vectordb.add([
-            _make_record(project_id="p1", source_id="s1"),
-            _make_record(project_id="p1", source_id="s2"),
-            _make_record(project_id="p2", source_id="s3"),
-        ])
+        vectordb.add(
+            [
+                _make_record(project_id="p1", source_id="s1"),
+                _make_record(project_id="p1", source_id="s2"),
+                _make_record(project_id="p2", source_id="s3"),
+            ]
+        )
         vectordb.delete("project_id = 'p1'")
         results = vectordb.search([1.0, 0.0, 0.0, 0.0], limit=10)
         assert len(results) == 1
@@ -161,20 +167,22 @@ class TestVectorStoreDelete:
 
 class TestVectorStoreFilterQueries:
     def test_get_by_filter_returns_sorted_rows_and_selected_columns(self, vectordb):
-        vectordb.add([
-            {
-                **_make_record(source_id="s-filter", text="chunk two"),
-                "chunk_index": 2,
-            },
-            {
-                **_make_record(source_id="s-filter", text="chunk zero"),
-                "chunk_index": 0,
-            },
-            {
-                **_make_record(source_id="s-filter", text="chunk one"),
-                "chunk_index": 1,
-            },
-        ])
+        vectordb.add(
+            [
+                {
+                    **_make_record(source_id="s-filter", text="chunk two"),
+                    "chunk_index": 2,
+                },
+                {
+                    **_make_record(source_id="s-filter", text="chunk zero"),
+                    "chunk_index": 0,
+                },
+                {
+                    **_make_record(source_id="s-filter", text="chunk one"),
+                    "chunk_index": 1,
+                },
+            ]
+        )
 
         rows = vectordb.get_by_filter(
             "source_id = 's-filter'",
@@ -190,11 +198,13 @@ class TestVectorStoreFilterQueries:
             vectordb.get_by_filter("")
 
     def test_get_by_filter_supports_offset_pagination(self, vectordb):
-        vectordb.add([
-            {**_make_record(source_id="s-page", text="chunk zero"), "chunk_index": 0},
-            {**_make_record(source_id="s-page", text="chunk one"), "chunk_index": 1},
-            {**_make_record(source_id="s-page", text="chunk two"), "chunk_index": 2},
-        ])
+        vectordb.add(
+            [
+                {**_make_record(source_id="s-page", text="chunk zero"), "chunk_index": 0},
+                {**_make_record(source_id="s-page", text="chunk one"), "chunk_index": 1},
+                {**_make_record(source_id="s-page", text="chunk two"), "chunk_index": 2},
+            ]
+        )
 
         rows = vectordb.get_by_filter(
             "source_id = 's-page'",
@@ -204,19 +214,19 @@ class TestVectorStoreFilterQueries:
         )
         assert [row["chunk_index"] for row in rows] == [1, 2]
 
-    def test_get_distinct_column_paginates_without_hard_cap(
-        self, vectordb, monkeypatch
-    ):
+    def test_get_distinct_column_paginates_without_hard_cap(self, vectordb, monkeypatch):
         from app.core import vectordb as vectordb_module
 
         monkeypatch.setattr(vectordb_module, "_DISTINCT_SCAN_PAGE_SIZE", 2)
-        vectordb.add([
-            _make_record(project_id="p1", source_id="s1"),
-            _make_record(project_id="p2", source_id="s2"),
-            _make_record(project_id="p3", source_id="s3"),
-            _make_record(project_id="p4", source_id="s4"),
-            _make_record(project_id="p5", source_id="s5"),
-        ])
+        vectordb.add(
+            [
+                _make_record(project_id="p1", source_id="s1"),
+                _make_record(project_id="p2", source_id="s2"),
+                _make_record(project_id="p3", source_id="s3"),
+                _make_record(project_id="p4", source_id="s4"),
+                _make_record(project_id="p5", source_id="s5"),
+            ]
+        )
 
         values = set(vectordb.get_distinct_column("project_id"))
         assert values == {"p1", "p2", "p3", "p4", "p5"}

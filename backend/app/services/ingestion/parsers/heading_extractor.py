@@ -35,11 +35,13 @@ def _extract_atx_headings(text: str) -> list[dict]:
     for match in _ATX_HEADING_RE.finditer(text):
         level = len(match.group(1))
         heading_text = match.group(2).strip()
-        results.append({
-            "level": level,
-            "text": heading_text,
-            "char_offset": match.start(),
-        })
+        results.append(
+            {
+                "level": level,
+                "text": heading_text,
+                "char_offset": match.start(),
+            }
+        )
     return results
 
 
@@ -84,10 +86,12 @@ def _extract_rst_headings(text: str) -> list[dict]:
         if prev_line_start < 0:
             prev_line_start = 0
 
-        results.append({
-            "level": level,
-            "text": prev_stripped,
-            "char_offset": prev_line_start,
-        })
+        results.append(
+            {
+                "level": level,
+                "text": prev_stripped,
+                "char_offset": prev_line_start,
+            }
+        )
 
     return results

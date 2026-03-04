@@ -134,30 +134,22 @@ class JobTracker:
                 return job
         except asyncio.TimeoutError as e:
             logger.error(
-                "Lock timeout acquiring active projects for project %s (waited 30s)",
-                project_id
+                "Lock timeout acquiring active projects for project %s (waited 30s)", project_id
             )
             raise ValueError(
                 "Failed to create sync job: system is busy. Please try again in a moment."
             ) from e
 
     async def get_job(self, db: AsyncSession, job_id: str) -> SyncJob | None:
-        result = await db.execute(
-            select(SyncJob).where(SyncJob.id == job_id)
-        )
+        result = await db.execute(select(SyncJob).where(SyncJob.id == job_id))
         return result.scalar_one_or_none()
 
-    async def get_active_job_for_project(
-        self, db: AsyncSession, project_id: str
-    ) -> SyncJob | None:
+    async def get_active_job_for_project(self, db: AsyncSession, project_id: str) -> SyncJob | None:
         try:
             async with self._lock:
                 job_id = self._active_projects.get(project_id)
         except asyncio.TimeoutError as e:
-            logger.error(
-                "Lock timeout checking active job for project %s (waited 30s)",
-                project_id
-            )
+            logger.error("Lock timeout checking active job for project %s (waited 30s)", project_id)
             raise ValueError(
                 "Failed to check sync job status: system is busy. Please try again in a moment."
             ) from e
@@ -167,28 +159,26 @@ class JobTracker:
 
     async def start_job(self, db: AsyncSession, job_id: str) -> None:
         await db.execute(
-            update(SyncJob)
-            .where(SyncJob.id == job_id)
-            .values(status=JobStatus.RUNNING.value)
+            update(SyncJob).where(SyncJob.id == job_id).values(status=JobStatus.RUNNING.value)
         )
         await db.commit()
 
     async def update_progress(self, db: AsyncSession, job_id: str, **kwargs: object) -> None:
         valid_fields = {
-            "total_files", "processed_files", "skipped_files", "failed_files",
-            "total_chunks", "current_file",
+            "total_files",
+            "processed_files",
+            "skipped_files",
+            "failed_files",
+            "total_chunks",
+            "current_file",
         }
         values = {k: v for k, v in kwargs.items() if k in valid_fields}
         if not values:
             return
-        await db.execute(
-            update(SyncJob).where(SyncJob.id == job_id).values(**values)
-        )
+        await db.execute(update(SyncJob).where(SyncJob.id == job_id).values(**values))
         await db.commit()
 
-    async def atomic_increment(
-        self, db: AsyncSession, job_id: str, **kwargs: int
-    ) -> None:
+    async def atomic_increment(self, db: AsyncSession, job_id: str, **kwargs: int) -> None:
         """Atomically increment integer counters on a sync job.
 
         Uses SQL expressions (e.g. ``processed_files = processed_files + 1``)
@@ -210,9 +200,7 @@ class JobTracker:
             values[col] = col + delta
         if not values:
             return
-        await db.execute(
-            update(SyncJob).where(SyncJob.id == job_id).values(values)
-        )
+        await db.execute(update(SyncJob).where(SyncJob.id == job_id).values(values))
         await db.commit()
 
     async def add_error(
@@ -248,8 +236,6 @@ class JobTracker:
 
     async def _remove_active(self, job_id: str) -> None:
         async with self._lock:
-            to_remove = [
-                pid for pid, jid in self._active_projects.items() if jid == job_id
-            ]
+            to_remove = [pid for pid, jid in self._active_projects.items() if jid == job_id]
             for pid in to_remove:
                 del self._active_projects[pid]

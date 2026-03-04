@@ -60,11 +60,13 @@ class TestSettingsStore:
 
     def test_atomic_write_survives_reopen(self, store_path: Path):
         store = SettingsStore(store_path)
-        store.update({
-            "llm_provider": "gemini",
-            "google_api_key": "AIzaTest1234",
-            "gemini_model": "gemini-2.5-flash",
-        })
+        store.update(
+            {
+                "llm_provider": "gemini",
+                "google_api_key": "AIzaTest1234",
+                "gemini_model": "gemini-2.5-flash",
+            }
+        )
 
         store2 = SettingsStore(store_path)
         assert store2.get("llm_provider") == "gemini"

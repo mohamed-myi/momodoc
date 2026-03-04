@@ -20,9 +20,7 @@ class TestExtractRetrievalScore:
         assert extract_retrieval_score(row, "keyword") == pytest.approx(5.0 / 6.0)
 
     def test_missing_score_default_is_configurable(self):
-        assert (
-            extract_retrieval_score({}, "hybrid", missing_score_default=1.0) == 1.0
-        )
+        assert extract_retrieval_score({}, "hybrid", missing_score_default=1.0) == 1.0
 
 
 class TestExtractCommonRetrievalFields:

@@ -52,9 +52,7 @@ async def list_sessions(
     return list(result.scalars().all())
 
 
-async def get_session(
-    db: AsyncSession, project_id: str | None, session_id: str
-) -> ChatSession:
+async def get_session(db: AsyncSession, project_id: str | None, session_id: str) -> ChatSession:
     stmt = select(ChatSession).where(ChatSession.id == session_id)
     if project_id is None:
         stmt = stmt.where(ChatSession.project_id.is_(None))
@@ -67,9 +65,7 @@ async def get_session(
     return session
 
 
-async def delete_session(
-    db: AsyncSession, project_id: str | None, session_id: str
-) -> None:
+async def delete_session(db: AsyncSession, project_id: str | None, session_id: str) -> None:
     session = await get_session(db, project_id, session_id)
     await db.delete(session)
     await db.commit()
@@ -149,7 +145,10 @@ async def query(
     llm_ms = (time.monotonic() - llm_start) * 1000
     logger.info(
         "Chat response: session=%s len=%d usage=%s duration=%.1fms",
-        session_id, len(response.content), response.usage, llm_ms,
+        session_id,
+        len(response.content),
+        response.usage,
+        llm_ms,
     )
 
     assistant_msg_id = await save_assistant_chat_turn(
@@ -223,11 +222,7 @@ async def stream_query(
     except Exception:
         await save_assistant_chat_turn(
             session_id=session_id,
-            content=(
-                full_content
-                if full_content
-                else "[Error: response generation failed]"
-            ),
+            content=(full_content if full_content else "[Error: response generation failed]"),
             context_sources=llm_inputs.context_sources,
         )
         raise
@@ -238,8 +233,6 @@ async def stream_query(
         context_sources=llm_inputs.context_sources,
     )
 
-    logger.info(
-        "Chat stream complete: session=%s response_len=%d", session_id, len(full_content)
-    )
+    logger.info("Chat stream complete: session=%s response_len=%d", session_id, len(full_content))
 
     yield f"event: done\ndata: {json.dumps({'message_id': assistant_msg_id})}\n\n"

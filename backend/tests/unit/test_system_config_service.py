@@ -93,9 +93,7 @@ class TestCheckEmbeddingModel:
     @pytest.mark.asyncio
     async def test_first_run_records_model(self, db_session):
         """On first run (no record), check should record the model and return unchanged."""
-        status = await system_config_service.check_embedding_model(
-            db_session, "all-MiniLM-L6-v2"
-        )
+        status = await system_config_service.check_embedding_model(db_session, "all-MiniLM-L6-v2")
 
         assert isinstance(status, EmbeddingModelStatus)
         assert status.model_changed is False
@@ -115,9 +113,7 @@ class TestCheckEmbeddingModel:
     async def test_matching_model_returns_unchanged(self, db_session):
         """If configured model matches stored model, model_changed is False."""
         await system_config_service.record_embedding_model(db_session, "all-MiniLM-L6-v2")
-        status = await system_config_service.check_embedding_model(
-            db_session, "all-MiniLM-L6-v2"
-        )
+        status = await system_config_service.check_embedding_model(db_session, "all-MiniLM-L6-v2")
         assert status.model_changed is False
         assert status.current_model == "all-MiniLM-L6-v2"
 

@@ -116,9 +116,7 @@ class SectionAwareTextChunker(Chunker):
         for section_text, breadcrumb in sections:
             if not section_text.strip():
                 continue
-            inner_chunker = TextChunker(
-                max_chunk_size=self.max_chunk_size, overlap=self.overlap
-            )
+            inner_chunker = TextChunker(max_chunk_size=self.max_chunk_size, overlap=self.overlap)
             inner_chunks = inner_chunker.chunk(section_text, metadata)
             for c in inner_chunks:
                 c.chunk_index = idx
@@ -128,9 +126,7 @@ class SectionAwareTextChunker(Chunker):
 
         return all_chunks
 
-    def _split_at_headings(
-        self, text: str, headings: list[dict]
-    ) -> list[tuple[str, str]]:
+    def _split_at_headings(self, text: str, headings: list[dict]) -> list[tuple[str, str]]:
         """Split text at heading boundaries and pair each section with its breadcrumb.
 
         Returns a list of (section_text, breadcrumb_string) tuples.
@@ -145,9 +141,7 @@ class SectionAwareTextChunker(Chunker):
             heading_text = h["text"]
             offset = h["char_offset"]
 
-            heading_stack = [
-                (lv, txt) for lv, txt in heading_stack if lv < level
-            ]
+            heading_stack = [(lv, txt) for lv, txt in heading_stack if lv < level]
             heading_stack.append((level, heading_text))
 
             breadcrumb = " > ".join(txt for _, txt in heading_stack)

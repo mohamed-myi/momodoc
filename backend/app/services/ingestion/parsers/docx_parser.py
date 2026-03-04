@@ -21,12 +21,8 @@ class DocxParser(FileParser):
         header_lines: list[str] = []
         footer_lines: list[str] = []
         for section in doc.sections:
-            header_lines.extend(
-                p.text.strip() for p in section.header.paragraphs if p.text.strip()
-            )
-            footer_lines.extend(
-                p.text.strip() for p in section.footer.paragraphs if p.text.strip()
-            )
+            header_lines.extend(p.text.strip() for p in section.header.paragraphs if p.text.strip())
+            footer_lines.extend(p.text.strip() for p in section.footer.paragraphs if p.text.strip())
 
         if header_lines:
             sections.append("[Header]\n" + "\n".join(header_lines))

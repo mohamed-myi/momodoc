@@ -23,9 +23,7 @@ class EmbeddingModelStatus:
 
 async def record_embedding_model(db: AsyncSession, model_name: str) -> None:
     """Store the embedding model name in system_config (upsert)."""
-    result = await db.execute(
-        select(SystemConfig).where(SystemConfig.key == EMBEDDING_MODEL_KEY)
-    )
+    result = await db.execute(select(SystemConfig).where(SystemConfig.key == EMBEDDING_MODEL_KEY))
     existing = result.scalar_one_or_none()
 
     if existing is not None:
@@ -44,23 +42,17 @@ async def record_embedding_model(db: AsyncSession, model_name: str) -> None:
         )
         existing = result.scalar_one()
         if existing.value != model_name:
-            raise EmbeddingModelMismatchError(
-                configured=model_name, stored=existing.value
-            )
+            raise EmbeddingModelMismatchError(configured=model_name, stored=existing.value)
 
 
-async def check_embedding_model(
-    db: AsyncSession, configured_model: str
-) -> EmbeddingModelStatus:
+async def check_embedding_model(db: AsyncSession, configured_model: str) -> EmbeddingModelStatus:
     """Check whether the configured embedding model matches what was used for indexing.
 
     If no record exists, this is the first run; record the model and return unchanged.
     If a record exists and differs, update it and return model_changed=True so the
     caller can trigger a migration (vector wipe and re-index).
     """
-    result = await db.execute(
-        select(SystemConfig).where(SystemConfig.key == EMBEDDING_MODEL_KEY)
-    )
+    result = await db.execute(select(SystemConfig).where(SystemConfig.key == EMBEDDING_MODEL_KEY))
     existing = result.scalar_one_or_none()
 
     if existing is None:

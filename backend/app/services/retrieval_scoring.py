@@ -45,28 +45,18 @@ def extract_retrieval_score(
     """
     if mode == "vector":
         distance = _row_number(row, "_distance")
-        return (
-            distance_to_similarity(distance)
-            if distance is not None
-            else missing_score_default
-        )
+        return distance_to_similarity(distance) if distance is not None else missing_score_default
 
     if mode == "hybrid":
         relevance = _row_number(row, "_relevance_score")
         if relevance is not None:
             return clamp_unit_interval(relevance)
         distance = _row_number(row, "_distance")
-        return (
-            distance_to_similarity(distance)
-            if distance is not None
-            else missing_score_default
-        )
+        return distance_to_similarity(distance) if distance is not None else missing_score_default
 
     raw_score = _row_number(row, "_score")
     return (
-        keyword_score_to_similarity(raw_score)
-        if raw_score is not None
-        else missing_score_default
+        keyword_score_to_similarity(raw_score) if raw_score is not None else missing_score_default
     )
 
 

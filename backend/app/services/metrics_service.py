@@ -159,15 +159,11 @@ async def get_chat_metrics(db: AsyncSession, days: int = 30) -> dict:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     total_sessions = (
-        await db.execute(
-            select(func.count(ChatSession.id)).where(ChatSession.created_at >= cutoff)
-        )
+        await db.execute(select(func.count(ChatSession.id)).where(ChatSession.created_at >= cutoff))
     ).scalar() or 0
 
     total_messages = (
-        await db.execute(
-            select(func.count(ChatMessage.id)).where(ChatMessage.created_at >= cutoff)
-        )
+        await db.execute(select(func.count(ChatMessage.id)).where(ChatMessage.created_at >= cutoff))
     ).scalar() or 0
 
     # Daily breakdown using date function
@@ -251,7 +247,11 @@ async def get_storage_metrics(db: AsyncSession, settings: Settings) -> dict:
         "database_bytes": db_size,
         "vectors_bytes": vector_size,
         "by_file_type": [
-            {"file_type": row.file_type or "unknown", "count": row.count, "total_bytes": row.total_bytes}
+            {
+                "file_type": row.file_type or "unknown",
+                "count": row.count,
+                "total_bytes": row.total_bytes,
+            }
             for row in by_type
         ],
     }
@@ -262,10 +262,14 @@ async def get_sync_metrics(db: AsyncSession, days: int = 30) -> dict:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     jobs = (
-        await db.execute(
-            select(SyncJob).where(SyncJob.created_at >= cutoff).order_by(SyncJob.created_at)
+        (
+            await db.execute(
+                select(SyncJob).where(SyncJob.created_at >= cutoff).order_by(SyncJob.created_at)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     total_jobs = len(jobs)
     total_files = sum(j.processed_files for j in jobs)

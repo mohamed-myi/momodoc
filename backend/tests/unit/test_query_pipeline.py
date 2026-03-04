@@ -106,17 +106,13 @@ class TestPlanQuery:
         assert plan.use_hyde is False
 
     def test_multi_part_with_llm_enables_decompose(self):
-        plan = plan_query(
-            "How does auth work? Where are rate limits?", llm_available=True
-        )
+        plan = plan_query("How does auth work? Where are rate limits?", llm_available=True)
         assert plan.query_type == QueryType.MULTI_PART
         assert plan.decompose is True
         assert plan.use_hyde is False
 
     def test_multi_part_without_llm_disables_decompose(self):
-        plan = plan_query(
-            "How does auth work? Where are rate limits?", llm_available=False
-        )
+        plan = plan_query("How does auth work? Where are rate limits?", llm_available=False)
         assert plan.decompose is False
 
     def test_keyword_sets_keyword_mode_hint(self):
@@ -194,9 +190,7 @@ class TestExecuteHydeSearch:
     @pytest.mark.asyncio
     async def test_combines_hyde_and_query_vectors(self):
         mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content="Hypothetical passage", model="test"
-        )
+        mock_llm.complete.return_value = LLMResponse(content="Hypothetical passage", model="test")
 
         mock_embedder = MagicMock()
         mock_embedder.aembed_single = AsyncMock(
@@ -215,7 +209,7 @@ class TestExecuteHydeSearch:
         assert len(results) == 1
         search_call = mock_vectordb.search.call_args
         search_vector = search_call[0][0]
-        norm = math.sqrt(sum(x ** 2 for x in search_vector))
+        norm = math.sqrt(sum(x**2 for x in search_vector))
         assert norm == pytest.approx(1.0, abs=1e-5)
 
     @pytest.mark.asyncio
@@ -267,9 +261,7 @@ class TestDecomposeQuery:
     @pytest.mark.asyncio
     async def test_single_line_returns_original(self):
         mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content="Just one question", model="test"
-        )
+        mock_llm.complete.return_value = LLMResponse(content="Just one question", model="test")
         subs = await decompose_query("original question", mock_llm)
         assert subs == ["original question"]
 

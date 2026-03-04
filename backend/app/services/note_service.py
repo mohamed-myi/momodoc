@@ -53,9 +53,7 @@ async def list_notes(
 
 
 async def get_note(db: AsyncSession, project_id: str, note_id: str) -> Note:
-    result = await db.execute(
-        select(Note).where(Note.id == note_id, Note.project_id == project_id)
-    )
+    result = await db.execute(select(Note).where(Note.id == note_id, Note.project_id == project_id))
     note = result.scalar_one_or_none()
     if note is None:
         raise NotFoundError("Note", note_id)
@@ -122,20 +120,22 @@ async def _index_note(
 
     records = []
     for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-        records.append({
-            "id": str(uuid.uuid4()),
-            "vector": vector,
-            "project_id": note.project_id,
-            "source_type": "note",
-            "source_id": note.id,
-            "filename": "",
-            "original_path": "",
-            "file_type": "note",
-            "chunk_index": i,
-            "chunk_text": chunk.text,
-            "language": "text",
-            "tags": json.dumps(tags),
-        })
+        records.append(
+            {
+                "id": str(uuid.uuid4()),
+                "vector": vector,
+                "project_id": note.project_id,
+                "source_type": "note",
+                "source_id": note.id,
+                "filename": "",
+                "original_path": "",
+                "file_type": "note",
+                "chunk_index": i,
+                "chunk_text": chunk.text,
+                "language": "text",
+                "tags": json.dumps(tags),
+            }
+        )
 
     await vectordb.add(records)
     return len(chunks)

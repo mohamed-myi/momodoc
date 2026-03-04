@@ -21,9 +21,7 @@ def add_note(
             json={"content": content, "tags": tags or None},
         )
         data = handle_response(resp)
-        console.print(
-            f"[green]Note added:[/green] {data['id'][:8]} ({data['chunk_count']} chunks)"
-        )
+        console.print(f"[green]Note added:[/green] {data['id'][:8]} ({data['chunk_count']} chunks)")
 
 
 @app.command("list")

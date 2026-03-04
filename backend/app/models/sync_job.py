@@ -10,12 +10,8 @@ from app.core.database import Base
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id"), nullable=False
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -41,9 +37,7 @@ class SyncJob(Base):
 class SyncJobError(Base):
     __tablename__ = "sync_job_errors"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     job_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("sync_jobs.id", ondelete="CASCADE"),

@@ -10,7 +10,9 @@ console = Console()
 def chat(
     project: str = typer.Argument(..., help="Project name or ID"),
     query: str = typer.Option(None, "--query", "-q", help="Single query (non-interactive)"),
-    model: str = typer.Option(None, "--model", "-m", help="LLM provider (gemini, claude, openai, ollama)"),
+    model: str = typer.Option(
+        None, "--model", "-m", help="LLM provider (gemini, claude, openai, ollama)"
+    ),
 ):
     """RAG-powered chat with project knowledge (requires API key)."""
     if query:

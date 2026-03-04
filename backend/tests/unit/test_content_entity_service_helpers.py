@@ -30,9 +30,7 @@ class TestCreateEntityWithIndexing:
         entity = _entity()
         index_entity = AsyncMock(return_value=3)
 
-        result = await create_entity_with_indexing(
-            mock_db, entity, index_entity=index_entity
-        )
+        result = await create_entity_with_indexing(mock_db, entity, index_entity=index_entity)
 
         assert result is entity
         assert entity.chunk_count == 3
@@ -71,9 +69,7 @@ class TestFinalizeEntityUpdate:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("entity_name", ["note", "issue"])
-    async def test_reindex_failure_sets_zero_commits_and_reraises(
-        self, mock_db, entity_name
-    ):
+    async def test_reindex_failure_sets_zero_commits_and_reraises(self, mock_db, entity_name):
         entity = _entity(entity_id=f"{entity_name}-123", chunk_count=5)
         delete_vectors = AsyncMock(return_value=None)
         index_entity = AsyncMock(side_effect=RuntimeError("index failed"))

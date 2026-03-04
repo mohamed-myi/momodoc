@@ -57,8 +57,7 @@ def validate_index_path(requested: str, allowed_paths: list[str]) -> Path:
             "None of the allowed index paths could be resolved. "
             f"Check that these directories exist: {allowed_paths}"
         )
-    
+
     raise ValidationError(
-        f"Path '{requested}' is outside the allowed directories. "
-        f"Allowed: {allowed_paths}"
+        f"Path '{requested}' is outside the allowed directories. Allowed: {allowed_paths}"
     )

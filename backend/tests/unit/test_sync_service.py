@@ -61,9 +61,7 @@ class TestCleanupDeletedFiles:
 
         # Simulate a file that exists on disk and has a DB record
         file_path = "/tmp/test-sync/src/main.py"
-        file_record = await self._create_file(
-            db_session, project.id, file_path
-        )
+        file_record = await self._create_file(db_session, project.id, file_path)
 
         # seen_paths includes the file (as _walk_directory found it on disk)
         seen_paths = {file_path}
@@ -73,9 +71,7 @@ class TestCleanupDeletedFiles:
         )
 
         # File record should still exist
-        result = await db_session.execute(
-            select(File).where(File.id == file_record.id)
-        )
+        result = await db_session.execute(select(File).where(File.id == file_record.id))
         assert result.scalar_one_or_none() is not None
         # vectordb.delete should NOT have been called
         mock_vectordb.delete.assert_not_called()
@@ -88,9 +84,7 @@ class TestCleanupDeletedFiles:
         project = await self._create_project(db_session)
 
         file_path = "/tmp/test-sync/deleted_file.py"
-        file_record = await self._create_file(
-            db_session, project.id, file_path
-        )
+        file_record = await self._create_file(db_session, project.id, file_path)
         file_id = file_record.id
 
         # File not in seen_paths AND not on disk
@@ -102,25 +96,19 @@ class TestCleanupDeletedFiles:
             )
 
         # File record should be gone
-        result = await db_session.execute(
-            select(File).where(File.id == file_id)
-        )
+        result = await db_session.execute(select(File).where(File.id == file_id))
         assert result.scalar_one_or_none() is None
         # vectordb.delete should have been called for vector cleanup
         mock_vectordb.delete.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cleanup_respects_os_path_exists_safety_check(
-        self, db_session, mock_vectordb
-    ):
+    async def test_cleanup_respects_os_path_exists_safety_check(self, db_session, mock_vectordb):
         """If a file is not in seen_paths but os.path.exists() returns True,
         it should NOT be deleted (defense-in-depth)."""
         project = await self._create_project(db_session)
 
         file_path = "/tmp/test-sync/still_here.py"
-        file_record = await self._create_file(
-            db_session, project.id, file_path
-        )
+        file_record = await self._create_file(db_session, project.id, file_path)
 
         # File not in seen_paths but still exists on disk
         seen_paths: set[str] = set()
@@ -131,9 +119,7 @@ class TestCleanupDeletedFiles:
             )
 
         # File record should still exist (safety check prevented deletion)
-        result = await db_session.execute(
-            select(File).where(File.id == file_record.id)
-        )
+        result = await db_session.execute(select(File).where(File.id == file_record.id))
         assert result.scalar_one_or_none() is not None
         mock_vectordb.delete.assert_not_called()
 
@@ -145,13 +131,9 @@ class TestCleanupDeletedFiles:
         project = await self._create_project(db_session)
 
         # File under synced directory
-        synced_file = await self._create_file(
-            db_session, project.id, "/tmp/test-sync/src/app.py"
-        )
+        synced_file = await self._create_file(db_session, project.id, "/tmp/test-sync/src/app.py")
         # File outside synced directory
-        other_file = await self._create_file(
-            db_session, project.id, "/other/path/lib.py"
-        )
+        other_file = await self._create_file(db_session, project.id, "/other/path/lib.py")
 
         seen_paths: set[str] = set()
 
@@ -161,20 +143,14 @@ class TestCleanupDeletedFiles:
             )
 
         # Only synced file should be deleted
-        result = await db_session.execute(
-            select(File).where(File.id == synced_file.id)
-        )
+        result = await db_session.execute(select(File).where(File.id == synced_file.id))
         assert result.scalar_one_or_none() is None
 
-        result = await db_session.execute(
-            select(File).where(File.id == other_file.id)
-        )
+        result = await db_session.execute(select(File).where(File.id == other_file.id))
         assert result.scalar_one_or_none() is not None
 
     @pytest.mark.asyncio
-    async def test_cleanup_ignores_managed_files(
-        self, db_session, mock_vectordb
-    ):
+    async def test_cleanup_ignores_managed_files(self, db_session, mock_vectordb):
         """Managed (uploaded) files should not be affected by sync cleanup."""
         project = await self._create_project(db_session)
 
@@ -190,9 +166,7 @@ class TestCleanupDeletedFiles:
             )
 
         # Managed file should still exist (cleanup query filters is_managed == False)
-        result = await db_session.execute(
-            select(File).where(File.id == managed_file.id)
-        )
+        result = await db_session.execute(select(File).where(File.id == managed_file.id))
         assert result.scalar_one_or_none() is not None
 
 
@@ -284,9 +258,7 @@ class TestSyncWorkerQueue:
         job_tracker.complete_job = AsyncMock()
         job_tracker.fail_job = AsyncMock()
 
-        discovered_files = [
-            f"/tmp/test-sync/file-{i}.py" for i in range(10)
-        ]
+        discovered_files = [f"/tmp/test-sync/file-{i}.py" for i in range(10)]
 
         bounded_settings = test_settings.model_copy(
             update={

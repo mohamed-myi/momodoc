@@ -57,12 +57,14 @@ class TestOpenAIStreamingContract:
     @pytest.mark.asyncio
     async def test_openai_stream_yields_only_text_tokens(self):
         provider = OpenAIProvider(api_key="test-key")
-        stream = _iter_chunks([
-            _chunk_with_delta("hello "),
-            _chunk_with_delta(None),
-            SimpleNamespace(choices=[]),
-            _chunk_with_delta("world"),
-        ])
+        stream = _iter_chunks(
+            [
+                _chunk_with_delta("hello "),
+                _chunk_with_delta(None),
+                SimpleNamespace(choices=[]),
+                _chunk_with_delta("world"),
+            ]
+        )
         with patch.object(
             provider.client.chat.completions,
             "create",
@@ -125,11 +127,13 @@ class TestGeminiStreamingContract:
     @pytest.mark.asyncio
     async def test_gemini_stream_maps_roles_and_yields_text(self):
         provider = GeminiProvider(api_key="test-key")
-        response = _iter_chunks([
-            SimpleNamespace(text="token-1"),
-            SimpleNamespace(text=None),
-            SimpleNamespace(text="token-2"),
-        ])
+        response = _iter_chunks(
+            [
+                SimpleNamespace(text="token-1"),
+                SimpleNamespace(text=None),
+                SimpleNamespace(text="token-2"),
+            ]
+        )
         with patch.object(
             provider.client.aio.models,
             "generate_content_stream",
@@ -176,11 +180,13 @@ class TestOllamaStreamingContract:
     @pytest.mark.asyncio
     async def test_ollama_stream_yields_only_text_tokens(self):
         provider = OllamaProvider(model="qwen2.5-coder:7b", base_url="http://localhost:11434/v1")
-        stream = _iter_chunks([
-            _chunk_with_delta("foo"),
-            _chunk_with_delta(None),
-            _chunk_with_delta("bar"),
-        ])
+        stream = _iter_chunks(
+            [
+                _chunk_with_delta("foo"),
+                _chunk_with_delta(None),
+                _chunk_with_delta("bar"),
+            ]
+        )
 
         with patch.object(
             provider.client.chat.completions,

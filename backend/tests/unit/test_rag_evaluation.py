@@ -32,17 +32,21 @@ class TestLoadRetrievalCases:
         file_path.write_text(
             "\n".join(
                 [
-                    json.dumps({
-                        "query": "how to deploy",
-                        "expected_source_ids": ["s1", "s2"],
-                        "project_id": "p1",
-                        "mode": "hybrid",
-                        "top_k": 5,
-                    }),
-                    json.dumps({
-                        "query": "auth middleware",
-                        "expected_source_ids": ["s3"],
-                    }),
+                    json.dumps(
+                        {
+                            "query": "how to deploy",
+                            "expected_source_ids": ["s1", "s2"],
+                            "project_id": "p1",
+                            "mode": "hybrid",
+                            "top_k": 5,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "query": "auth middleware",
+                            "expected_source_ids": ["s3"],
+                        }
+                    ),
                 ]
             ),
             encoding="utf-8",
@@ -114,8 +118,7 @@ class TestEvaluateRetrieval:
     @pytest.mark.asyncio
     async def test_evaluate_retrieval_uses_bounded_concurrency(self):
         cases = [
-            RetrievalEvalCase(query=f"q{i}", expected_source_ids=["s1"], top_k=1)
-            for i in range(24)
+            RetrievalEvalCase(query=f"q{i}", expected_source_ids=["s1"], top_k=1) for i in range(24)
         ]
         active = 0
         max_active = 0

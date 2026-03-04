@@ -29,14 +29,27 @@ from app.services.ingestion.parsers.code_parser import EXTENSION_TO_LANGUAGE
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = (
-    set(EXTENSION_TO_LANGUAGE.keys())
-    | {".md", ".markdown", ".rst", ".txt", ".pdf", ".docx"}
-)
+SUPPORTED_EXTENSIONS = set(EXTENSION_TO_LANGUAGE.keys()) | {
+    ".md",
+    ".markdown",
+    ".rst",
+    ".txt",
+    ".pdf",
+    ".docx",
+}
 
 IGNORE_DIRS = {
-    "node_modules", "__pycache__", ".git", ".venv", "venv",
-    "dist", "build", ".next", ".tox", ".mypy_cache", ".pytest_cache",
+    "node_modules",
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".next",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
     "egg-info",
 }
 
@@ -48,6 +61,7 @@ class IngestionResult:
     chunks_created: int
     skipped: bool = False
     errors: list[str] = field(default_factory=list)
+
 
 _INGEST_BATCH_SIZE = 512
 _INDEX_DISCOVERY_BATCH_SIZE = 256
@@ -103,15 +117,18 @@ class IngestionPipeline:
         except Exception as e:
             logger.error("Failed to stat file %s: %s", file_path, e)
             return IngestionResult(
-                file_id="", filename=filename, chunks_created=0,
+                file_id="",
+                filename=filename,
+                chunks_created=0,
                 errors=[f"File read error: {str(e)}"],
             )
         if file_size > max_bytes:
             return IngestionResult(
-                file_id="", filename=filename, chunks_created=0,
+                file_id="",
+                filename=filename,
+                chunks_created=0,
                 errors=[
-                    f"File too large ({file_size // (1024 * 1024)} MB, "
-                    f"max {max_file_size_mb} MB)"
+                    f"File too large ({file_size // (1024 * 1024)} MB, max {max_file_size_mb} MB)"
                 ],
             )
 
@@ -151,9 +168,7 @@ class IngestionPipeline:
             file_record.file_size = file_size
         else:
             # Normalize original_path to resolve symlinks, /./, and .. segments
-            normalized_path = (
-                os.path.realpath(original_path) if original_path else original_path
-            )
+            normalized_path = os.path.realpath(original_path) if original_path else original_path
             file_record = File(
                 project_id=project_id,
                 filename=filename,
@@ -202,9 +217,7 @@ class IngestionPipeline:
             file_record.chunk_count = 0
             file_record.indexed_at = datetime.now(timezone.utc)
             await self.db.commit()
-            return IngestionResult(
-                file_id=file_record.id, filename=filename, chunks_created=0
-            )
+            return IngestionResult(file_id=file_record.id, filename=filename, chunks_created=0)
 
         # Embed + store in batches to bound memory usage.
         # Each batch: embed chunk texts → build records → write to LanceDB.
@@ -221,31 +234,35 @@ class IngestionPipeline:
                 batch_records = []
                 for i, (chunk, vector) in enumerate(zip(batch_chunks, batch_vectors)):
                     content_hash = hashlib.sha256(chunk.text.encode()).hexdigest()[:16]
-                    batch_records.append({
-                        "id": str(uuid.uuid4()),
-                        "vector": vector,
-                        "project_id": project_id,
-                        "source_type": "file",
-                        "source_id": file_record.id,
-                        "filename": filename,
-                        "original_path": original_path or "",
-                        "file_type": ext.lstrip("."),
-                        "chunk_index": batch_start + i,
-                        "chunk_text": chunk.text,
-                        "language": parsed.language or "",
-                        "tags": json.dumps([]),
-                        "content_hash": content_hash,
-                        "section_header": chunk.section_header,
-                    })
+                    batch_records.append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "vector": vector,
+                            "project_id": project_id,
+                            "source_type": "file",
+                            "source_id": file_record.id,
+                            "filename": filename,
+                            "original_path": original_path or "",
+                            "file_type": ext.lstrip("."),
+                            "chunk_index": batch_start + i,
+                            "chunk_text": chunk.text,
+                            "language": parsed.language or "",
+                            "tags": json.dumps([]),
+                            "content_hash": content_hash,
+                            "section_header": chunk.section_header,
+                        }
+                    )
 
                 await self.vectordb.add(batch_records)
                 total_stored += len(batch_records)
         except Exception as e:
             file_id = file_record.id
             logger.error(
-                "Vector storage failed for %s (id=%s) at batch offset %d. "
-                "Error: %s",
-                filename, file_id, total_stored, e,
+                "Vector storage failed for %s (id=%s) at batch offset %d. Error: %s",
+                filename,
+                file_id,
+                total_stored,
+                e,
             )
             if is_reingestion:
                 # Rollback to preserve old checksum so next sync retries
@@ -290,9 +307,7 @@ class IngestionPipeline:
     ) -> list[IngestionResult]:
         results: list[IngestionResult] = []
         max_workers = (
-            self.settings.index_max_concurrent_files
-            if self.settings
-            else _DEFAULT_INDEX_WORKERS
+            self.settings.index_max_concurrent_files if self.settings else _DEFAULT_INDEX_WORKERS
         )
         batch_size = (
             self.settings.index_discovery_batch_size
@@ -307,9 +322,7 @@ class IngestionPipeline:
                 return await self._ingest_directory_path(project_id, full_path)
 
         while True:
-            batch = await asyncio.to_thread(
-                self._next_directory_batch, path_iterator, batch_size
-            )
+            batch = await asyncio.to_thread(self._next_directory_batch, path_iterator, batch_size)
             if not batch:
                 break
 

@@ -24,9 +24,7 @@ _DOTTED_IDENT_RE = re.compile(r"\w\.\w")
 _CONCEPTUAL_STARTS = ("how", "why", "explain", "describe")
 _CONCEPTUAL_PHRASES = ("what is", "what are", "what does", "what do")
 
-_CONJUNCTION_PATTERNS = re.compile(
-    r"\b(and\b.+\?|also\b|plus\b|as well as\b)", re.IGNORECASE
-)
+_CONJUNCTION_PATTERNS = re.compile(r"\b(and\b.+\?|also\b|plus\b|as well as\b)", re.IGNORECASE)
 
 MAX_SUB_QUERIES = 4
 RRF_K = 60
@@ -173,18 +171,12 @@ async def decompose_query(query: str, llm: LLMProvider) -> list[str]:
             max_tokens=256,
             temperature=0.1,
         )
-        lines = [
-            line.strip()
-            for line in response.content.strip().splitlines()
-            if line.strip()
-        ]
+        lines = [line.strip() for line in response.content.strip().splitlines() if line.strip()]
         if len(lines) <= 1:
             return [query]
         return lines[:MAX_SUB_QUERIES]
     except Exception:
-        logger.warning(
-            "Query decomposition failed; falling back to original query", exc_info=True
-        )
+        logger.warning("Query decomposition failed; falling back to original query", exc_info=True)
         return [query]
 
 

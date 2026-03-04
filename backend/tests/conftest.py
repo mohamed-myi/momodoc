@@ -61,9 +61,7 @@ async def db_session(db_engine):
     """Provide a transactional async session that rolls back after each test."""
     from app.core import database as db_module
 
-    session_factory = async_sessionmaker(
-        db_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
 
     # Set the global session factory for services that create their own sessions
     db_module.async_session_factory = session_factory
@@ -137,9 +135,7 @@ def mock_reranker():
 def mock_llm():
     """Return a mock LLM provider."""
     llm = AsyncMock(spec=LLMProvider)
-    llm.complete.return_value = LLMResponse(
-        content="Test answer", model="test-model", usage={}
-    )
+    llm.complete.return_value = LLMResponse(content="Test answer", model="test-model", usage={})
 
     async def _mock_stream(*args, **kwargs):
         for token in ["Test ", "answer"]:

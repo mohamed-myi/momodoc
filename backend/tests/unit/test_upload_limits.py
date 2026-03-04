@@ -26,7 +26,7 @@ class TestUploadSizeLimits:
                 chunk = data[offset:]
                 offset = len(data)
             else:
-                chunk = data[offset:offset + size]
+                chunk = data[offset : offset + size]
                 offset += size
             return chunk
 
@@ -68,7 +68,7 @@ class TestUploadSizeLimits:
                 chunk = data[offset:]
                 offset = len(data)
             else:
-                chunk = data[offset:offset + size]
+                chunk = data[offset : offset + size]
                 offset += size
             return chunk
 
@@ -77,9 +77,7 @@ class TestUploadSizeLimits:
         upload_file.read = mock_read
 
         # Mock the pipeline to avoid actual ingestion
-        mock_result = IngestionResult(
-            file_id="test-id", filename="small.txt", chunks_created=1
-        )
+        mock_result = IngestionResult(file_id="test-id", filename="small.txt", chunks_created=1)
 
         db = AsyncMock()
         vectordb = MagicMock()

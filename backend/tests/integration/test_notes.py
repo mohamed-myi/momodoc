@@ -95,9 +95,7 @@ class TestNoteEndpoints:
 
         mock_vectordb.delete.reset_mock()
 
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/notes/{note_id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/notes/{note_id}")
         assert resp.status_code == 204
 
         # Vectors should be cleaned up
@@ -109,9 +107,7 @@ class TestNoteEndpoints:
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_note_404(self, client, project_id):
-        resp = await client.delete(
-            f"/api/v1/projects/{project_id}/notes/nonexistent-id"
-        )
+        resp = await client.delete(f"/api/v1/projects/{project_id}/notes/nonexistent-id")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -128,9 +124,7 @@ class TestNoteEndpoints:
         other_id = resp2.json()["id"]
 
         # Try to access the note via the wrong project
-        resp = await client.delete(
-            f"/api/v1/projects/{other_id}/notes/{note_id}"
-        )
+        resp = await client.delete(f"/api/v1/projects/{other_id}/notes/{note_id}")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -179,9 +173,7 @@ class TestNoteEndpoints:
     @pytest.mark.asyncio
     async def test_get_nonexistent_note_404(self, client, project_id):
         """Getting a nonexistent note should return 404."""
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/notes/nonexistent-id"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/notes/nonexistent-id")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -203,8 +195,6 @@ class TestNoteEndpoints:
                 json={"content": f"Note {i}"},
             )
 
-        resp = await client.get(
-            f"/api/v1/projects/{project_id}/notes?offset=2&limit=2"
-        )
+        resp = await client.get(f"/api/v1/projects/{project_id}/notes?offset=2&limit=2")
         assert resp.status_code == 200
         assert len(resp.json()) == 2

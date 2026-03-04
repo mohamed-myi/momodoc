@@ -51,17 +51,16 @@ async def list_projects(
     db: AsyncSession, offset: int = 0, limit: int = 20
 ) -> list[ProjectResponse]:
     result = await db.execute(
-        select(Project)
-        .order_by(Project.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+        select(Project).order_by(Project.created_at.desc()).offset(offset).limit(limit)
     )
     projects = result.scalars().all()
     if not projects:
         return []
 
     counts_map = await _get_project_counts_map(db, [project.id for project in projects])
-    return [_to_response(project, counts_map.get(project.id, _zero_counts())) for project in projects]
+    return [
+        _to_response(project, counts_map.get(project.id, _zero_counts())) for project in projects
+    ]
 
 
 async def get_project(db: AsyncSession, project_id: str) -> ProjectResponse:
@@ -88,9 +87,7 @@ async def update_project(
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        raise ConflictError(
-            f"A project named '{update_data.get('name', '')}' already exists."
-        )
+        raise ConflictError(f"A project named '{update_data.get('name', '')}' already exists.")
     await db.refresh(project)
     counts = await _get_project_counts(db, project.id)
     return _to_response(project, counts)
@@ -107,7 +104,8 @@ async def delete_project(
     # Select only the column we need to avoid loading full ORM objects.
     files_result = await db.execute(
         select(File.storage_path).where(
-            File.project_id == project.id, File.is_managed == True  # noqa: E712
+            File.project_id == project.id,
+            File.is_managed == True,  # noqa: E712
         )
     )
     managed_paths = [row[0] for row in files_result.all() if row[0]]
@@ -138,9 +136,7 @@ async def delete_project(
 
 async def resolve_project_or_404(db: AsyncSession, project_id: str) -> Project:
     result = await db.execute(
-        select(Project).where(
-            (Project.id == project_id) | (Project.name == project_id)
-        )
+        select(Project).where((Project.id == project_id) | (Project.name == project_id))
     )
     project = result.scalar_one_or_none()
     if project is None:
@@ -190,9 +186,7 @@ async def _get_project_counts_map(db: AsyncSession, project_ids: list[str]) -> d
     return counts
 
 
-def _to_response(
-    project: Project, counts: dict, sync_job_id: str | None = None
-) -> ProjectResponse:
+def _to_response(project: Project, counts: dict, sync_job_id: str | None = None) -> ProjectResponse:
     return ProjectResponse(
         id=project.id,
         name=project.name,

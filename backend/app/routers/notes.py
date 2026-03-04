@@ -10,9 +10,7 @@ from app.services.ingestion.embedder import Embedder
 router = APIRouter()
 
 
-@router.post(
-    "/projects/{project_id}/notes", response_model=NoteResponse, status_code=201
-)
+@router.post("/projects/{project_id}/notes", response_model=NoteResponse, status_code=201)
 async def create_note(
     data: NoteCreate,
     project=Depends(get_project),
@@ -20,9 +18,7 @@ async def create_note(
     vectordb: AsyncVectorStore = Depends(get_vectordb),
     embedder: Embedder = Depends(get_embedder),
 ):
-    return await note_service.create_note(
-        db, vectordb, embedder, project.id, data
-    )
+    return await note_service.create_note(db, vectordb, embedder, project.id, data)
 
 
 @router.get("/projects/{project_id}/notes", response_model=list[NoteResponse])
@@ -35,9 +31,7 @@ async def list_notes(
     return await note_service.list_notes(db, project.id, offset=offset, limit=limit)
 
 
-@router.get(
-    "/projects/{project_id}/notes/{note_id}", response_model=NoteResponse
-)
+@router.get("/projects/{project_id}/notes/{note_id}", response_model=NoteResponse)
 async def get_note(
     note_id: str,
     project=Depends(get_project),
@@ -46,9 +40,7 @@ async def get_note(
     return await note_service.get_note(db, project.id, note_id)
 
 
-@router.patch(
-    "/projects/{project_id}/notes/{note_id}", response_model=NoteResponse
-)
+@router.patch("/projects/{project_id}/notes/{note_id}", response_model=NoteResponse)
 async def update_note(
     note_id: str,
     data: NoteUpdate,
@@ -57,9 +49,7 @@ async def update_note(
     vectordb: AsyncVectorStore = Depends(get_vectordb),
     embedder: Embedder = Depends(get_embedder),
 ):
-    return await note_service.update_note(
-        db, vectordb, embedder, project.id, note_id, data
-    )
+    return await note_service.update_note(db, vectordb, embedder, project.id, note_id, data)
 
 
 @router.delete("/projects/{project_id}/notes/{note_id}", status_code=204)

@@ -111,9 +111,7 @@ class TreeSitterChunker(Chunker):
         for child in node.children:
             if child.type in target_types:
                 # Capture any leading comment block
-                text = self._extract_with_leading_comments(
-                    node, child, source, prev_end
-                )
+                text = self._extract_with_leading_comments(node, child, source, prev_end)
                 out.append(text)
                 prev_end = child.end_byte
             elif child.type == "comment" or child.type == "block_comment":
@@ -121,7 +119,7 @@ class TreeSitterChunker(Chunker):
                 continue
             else:
                 # For non-definition nodes (imports, etc.), collect as preamble
-                text = source[child.start_byte:child.end_byte].strip()
+                text = source[child.start_byte : child.end_byte].strip()
                 if text and child is node.children[0]:
                     # Preamble (imports, module docstrings)
                     out.append(text)
@@ -141,12 +139,16 @@ class TreeSitterChunker(Chunker):
             if sibling.end_byte > node.start_byte:
                 break
             if sibling.start_byte >= prev_end and sibling.type in (
-                "comment", "block_comment", "line_comment", "decorator",
-                "decorated_definition", "attribute",
+                "comment",
+                "block_comment",
+                "line_comment",
+                "decorator",
+                "decorated_definition",
+                "attribute",
             ):
                 comment_start = min(comment_start, sibling.start_byte)
 
-        return source[comment_start:node.end_byte].strip()
+        return source[comment_start : node.end_byte].strip()
 
     def _merge_small(self, chunks: list[str]) -> list[str]:
         """Merge adjacent small chunks."""
@@ -184,9 +186,7 @@ class TreeSitterChunker(Chunker):
             chunks.append(current)
         return chunks
 
-    def _make_text_chunks(
-        self, texts: list[str], metadata: dict | None
-    ) -> list[TextChunk]:
+    def _make_text_chunks(self, texts: list[str], metadata: dict | None) -> list[TextChunk]:
         return [
             TextChunk(text=t, chunk_index=i, metadata=metadata or {})
             for i, t in enumerate(texts)

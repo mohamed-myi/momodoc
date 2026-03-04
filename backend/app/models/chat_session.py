@@ -10,9 +10,7 @@ from app.core.database import Base
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("projects.id"), nullable=True
     )
@@ -27,6 +25,4 @@ class ChatSession(Base):
     )
 
     project = relationship("Project", back_populates="chat_sessions")
-    messages = relationship(
-        "ChatMessage", back_populates="session", cascade="all, delete-orphan"
-    )
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")

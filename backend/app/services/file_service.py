@@ -156,9 +156,7 @@ async def list_files(
 
 
 async def get_file(db: AsyncSession, project_id: str, file_id: str) -> File:
-    result = await db.execute(
-        select(File).where(File.id == file_id, File.project_id == project_id)
-    )
+    result = await db.execute(select(File).where(File.id == file_id, File.project_id == project_id))
     file = result.scalar_one_or_none()
     if file is None:
         raise NotFoundError("File", file_id)

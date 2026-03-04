@@ -168,11 +168,13 @@ class ProviderRegistry:
         result = []
         for name in ALL_PROVIDERS:
             available = self._is_configured(name)
-            result.append({
-                "name": name,
-                "available": available,
-                "model": self._get_model_name(name),
-            })
+            result.append(
+                {
+                    "name": name,
+                    "available": available,
+                    "model": self._get_model_name(name),
+                }
+            )
         return result
 
     def _is_configured(self, name: str) -> bool:

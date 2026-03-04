@@ -16,17 +16,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_LLM_SETTINGS_KEYS = frozenset({
-    "llm_provider",
-    "anthropic_api_key",
-    "claude_model",
-    "openai_api_key",
-    "openai_model",
-    "google_api_key",
-    "gemini_model",
-    "ollama_base_url",
-    "ollama_model",
-})
+_LLM_SETTINGS_KEYS = frozenset(
+    {
+        "llm_provider",
+        "anthropic_api_key",
+        "claude_model",
+        "openai_api_key",
+        "openai_model",
+        "google_api_key",
+        "gemini_model",
+        "ollama_base_url",
+        "ollama_model",
+    }
+)
 
 
 class SettingsStore:

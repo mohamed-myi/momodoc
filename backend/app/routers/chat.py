@@ -93,6 +93,7 @@ def _stream_response(
     query_llm: LLMProvider | None = None,
 ):
     """Build a StreamingResponse for chat streaming."""
+
     async def event_generator():
         try:
             async for event in chat_service.stream_query(
@@ -112,10 +113,12 @@ def _stream_response(
                 yield event
         except Exception as e:
             logger.error("Stream error: %s\n%s", e, traceback.format_exc())
-            error_payload = json.dumps({
-                "error": str(e),
-                "type": type(e).__name__,
-            })
+            error_payload = json.dumps(
+                {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                }
+            )
             yield f"event: error\ndata: {error_payload}\n\n"
 
     return StreamingResponse(
@@ -219,8 +222,15 @@ async def _stream_message_impl(
 ):
     llm = _resolve_provider(data, registry, default_llm)
     return _stream_response(
-        vectordb, embedder, llm, project_id, session_id, data,
-        reranker=reranker, candidate_k=candidate_k, query_llm=query_llm,
+        vectordb,
+        embedder,
+        llm,
+        project_id,
+        session_id,
+        data,
+        reranker=reranker,
+        candidate_k=candidate_k,
+        query_llm=query_llm,
     )
 
 

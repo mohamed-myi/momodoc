@@ -12,11 +12,7 @@ def iter_directory_paths(
 ) -> Iterator[str]:
     """Yield supported, non-hidden files under `directory_path`."""
     for root, dirs, files in os.walk(directory_path):
-        dirs[:] = [
-            d for d in dirs
-            if d not in ignore_dirs
-            and not d.endswith(".egg-info")
-        ]
+        dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.endswith(".egg-info")]
         for fname in files:
             if fname.startswith("."):
                 continue

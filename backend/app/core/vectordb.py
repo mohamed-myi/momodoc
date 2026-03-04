@@ -149,22 +149,24 @@ class VectorStore:
             table_names = list(self.db.table_names())
 
         if self.TABLE_NAME not in table_names:
-            schema = pa.schema([
-                pa.field("id", pa.string()),
-                pa.field("vector", pa.list_(pa.float32(), self.vector_dim)),
-                pa.field("project_id", pa.string()),
-                pa.field("source_type", pa.string()),
-                pa.field("source_id", pa.string()),
-                pa.field("filename", pa.string()),
-                pa.field("original_path", pa.string()),
-                pa.field("file_type", pa.string()),
-                pa.field("chunk_index", pa.int32()),
-                pa.field("chunk_text", pa.string()),
-                pa.field("language", pa.string()),
-                pa.field("tags", pa.string()),
-                pa.field("content_hash", pa.string()),
-                pa.field("section_header", pa.string()),
-            ])
+            schema = pa.schema(
+                [
+                    pa.field("id", pa.string()),
+                    pa.field("vector", pa.list_(pa.float32(), self.vector_dim)),
+                    pa.field("project_id", pa.string()),
+                    pa.field("source_type", pa.string()),
+                    pa.field("source_id", pa.string()),
+                    pa.field("filename", pa.string()),
+                    pa.field("original_path", pa.string()),
+                    pa.field("file_type", pa.string()),
+                    pa.field("chunk_index", pa.int32()),
+                    pa.field("chunk_text", pa.string()),
+                    pa.field("language", pa.string()),
+                    pa.field("tags", pa.string()),
+                    pa.field("content_hash", pa.string()),
+                    pa.field("section_header", pa.string()),
+                ]
+            )
             try:
                 self.db.create_table(self.TABLE_NAME, schema=schema)
             except Exception as e:
@@ -205,12 +207,12 @@ class VectorStore:
 
         Each record must contain a ``vector`` key (list[float]) and metadata keys
         matching the table schema.  If ``id`` is missing it will be auto-generated.
-        
+
         Note: Does not mutate the input records list or individual dicts.
         """
         if not records:
             return
-        
+
         # Work on shallow copies to avoid mutating caller's data
         processed = []
         for r in records:
@@ -218,13 +220,17 @@ class VectorStore:
             rec.setdefault("id", str(uuid.uuid4()))
             # Ensure nullable string fields default to empty string for Arrow
             for field in (
-                "filename", "original_path", "language", "tags",
-                "content_hash", "section_header",
+                "filename",
+                "original_path",
+                "language",
+                "tags",
+                "content_hash",
+                "section_header",
             ):
                 if rec.get(field) is None:
                     rec[field] = ""
             processed.append(rec)
-        
+
         self._run_table_operation(
             operation="add",
             callback=lambda table: table.add(processed),
@@ -243,7 +249,7 @@ class VectorStore:
         """Vector similarity search with optional SQL-style filter.
 
         Returns a list of dicts with all table columns plus a ``_distance`` key.
-        
+
         Note: limit is clamped to >= 1 (LanceDB requires positive limit for ANN queries).
         """
         limit = self._normalize_positive_limit(limit, operation="search")
@@ -296,11 +302,7 @@ class VectorStore:
 
         try:
             table = self._open_table()
-            query = (
-                table.search(query_type="hybrid")
-                .vector(query_vector)
-                .text(query_text)
-            )
+            query = table.search(query_type="hybrid").vector(query_vector).text(query_text)
             query = self._apply_search_tuning(query, limit).limit(limit)
             if filter_str:
                 query = query.where(filter_str)
@@ -455,6 +457,7 @@ class VectorStore:
 
         Scans in paginated batches to avoid memory spikes on large tables.
         """
+
         def _get_distinct_column(table):
             unique_values: set[str] = set()
             offset = 0
@@ -496,7 +499,7 @@ class VectorStore:
         if not filter_str or not filter_str.strip():
             raise VectorStoreError(
                 "delete() requires a non-empty filter string to prevent accidental deletion of all records",
-                operation="delete"
+                operation="delete",
             )
 
         self._run_table_operation(

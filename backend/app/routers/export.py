@@ -161,9 +161,7 @@ async def export_chat_session(
 
     if format == ExportFormat.markdown:
         content = _format_chat_markdown(session, messages)
-        return _make_download_response(
-            content, f"{safe_title}.md", "text/markdown; charset=utf-8"
-        )
+        return _make_download_response(content, f"{safe_title}.md", "text/markdown; charset=utf-8")
     else:
         content = _format_chat_json(session, messages)
         return _make_download_response(

@@ -12,5 +12,4 @@ class TextChunk:
 
 class Chunker(ABC):
     @abstractmethod
-    def chunk(self, text: str, metadata: dict | None = None) -> list[TextChunk]:
-        ...
+    def chunk(self, text: str, metadata: dict | None = None) -> list[TextChunk]: ...

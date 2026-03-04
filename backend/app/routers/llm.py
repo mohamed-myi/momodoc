@@ -58,9 +58,7 @@ def _current_model_for_provider(provider: str, settings: Settings) -> str:
     return mapping.get(provider, "")
 
 
-async def _fetch_models_from_api(
-    provider: str, settings: Settings
-) -> list[ModelInfo] | None:
+async def _fetch_models_from_api(provider: str, settings: Settings) -> list[ModelInfo] | None:
     """Try to fetch models from the provider API. Returns None on failure."""
     try:
         if provider == "claude" and settings.anthropic_api_key:
@@ -82,10 +80,12 @@ async def _fetch_claude_models(api_key: str) -> list[ModelInfo]:
     client = anthropic.AsyncAnthropic(api_key=api_key)
     result = []
     async for model in client.models.list(limit=100):
-        result.append(ModelInfo(
-            id=model.id,
-            display_name=model.display_name or model.id,
-        ))
+        result.append(
+            ModelInfo(
+                id=model.id,
+                display_name=model.display_name or model.id,
+            )
+        )
     return result
 
 
@@ -117,13 +117,15 @@ async def _fetch_gemini_models(api_key: str) -> list[ModelInfo]:
     for model in client.models.list():
         name = model.name or ""
         if name.startswith("models/"):
-            name = name[len("models/"):]
+            name = name[len("models/") :]
         if not name.startswith("gemini-"):
             continue
-        result.append(ModelInfo(
-            id=name,
-            display_name=model.display_name or name,
-        ))
+        result.append(
+            ModelInfo(
+                id=name,
+                display_name=model.display_name or name,
+            )
+        )
     return result
 
 
@@ -148,9 +150,7 @@ async def _fetch_ollama_models(base_url: str) -> list[ModelInfo]:
     return result
 
 
-def _to_response(
-    models: list[ModelInfo], current_model: str
-) -> list[ModelInfoResponse]:
+def _to_response(models: list[ModelInfo], current_model: str) -> list[ModelInfoResponse]:
     return [
         ModelInfoResponse(
             id=m.id,

@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.async_vectordb import AsyncVectorStore
 from app.core.exceptions import NotFoundError
 from app.dependencies import get_db, get_project, get_vectordb
-from app.schemas.batch import BatchDeleteRequest, BatchDeleteResponse, BatchTagRequest, BatchTagResponse
+from app.schemas.batch import (
+    BatchDeleteRequest,
+    BatchDeleteResponse,
+    BatchTagRequest,
+    BatchTagResponse,
+)
 from app.schemas.file import FileUpdate
 from app.services import file_service, issue_service
 

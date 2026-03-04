@@ -141,10 +141,7 @@ class TestRegexCodeChunker:
         body_b = "\n".join(f"    line_b_{i} = {i}" for i in range(40))
         body_c = "\n".join(f"    line_c_{i} = {i}" for i in range(40))
         code = (
-            "import os\n\n"
-            f"def foo():\n{body_a}\n\n"
-            f"def bar():\n{body_b}\n\n"
-            f"class Baz:\n{body_c}\n"
+            f"import os\n\ndef foo():\n{body_a}\n\ndef bar():\n{body_b}\n\nclass Baz:\n{body_c}\n"
         )
         chunks = self.chunker.chunk(code, {"language": "python"})
         assert len(chunks) >= 2
@@ -154,10 +151,7 @@ class TestRegexCodeChunker:
 
     def test_python_preamble_preserved(self):
         """Imports before the first def/class should be kept as a chunk."""
-        code = (
-            "import os\nimport sys\n\n"
-            "def main():\n    print('hello')\n"
-        )
+        code = "import os\nimport sys\n\ndef main():\n    print('hello')\n"
         chunks = self.chunker.chunk(code, {"language": "python"})
         # The preamble "import os\nimport sys" should appear in a chunk
         all_text = " ".join(c.text for c in chunks)
@@ -213,8 +207,18 @@ class TestRegexCodeChunker:
     def test_boundary_patterns_exist_for_documented_languages(self):
         """Verify BOUNDARY_PATTERNS covers the languages documented."""
         expected = {
-            "python", "javascript", "typescript", "java", "go", "rust",
-            "c", "cpp", "ruby", "php", "swift", "kotlin",
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "go",
+            "rust",
+            "c",
+            "cpp",
+            "ruby",
+            "php",
+            "swift",
+            "kotlin",
         }
         assert set(BOUNDARY_PATTERNS.keys()) == expected
 
@@ -488,9 +492,7 @@ class TestParsers:
 
     def test_supported_extensions_covers_doc_types(self):
         for ext in (".md", ".markdown", ".rst", ".txt", ".pdf", ".docx"):
-            assert ext in SUPPORTED_EXTENSIONS, (
-                f"{ext} should be in SUPPORTED_EXTENSIONS"
-            )
+            assert ext in SUPPORTED_EXTENSIONS, f"{ext} should be in SUPPORTED_EXTENSIONS"
 
     def test_every_supported_extension_has_a_parser(self):
         """Every extension in SUPPORTED_EXTENSIONS should be handled by at least one parser."""
@@ -544,18 +546,14 @@ class TestIngestionPipeline:
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
         assert isinstance(pipeline._select_parser(".docx"), DocxParser)
 
-    def test_select_parser_unsupported_returns_none(
-        self, db_session, mock_vectordb, mock_embedder
-    ):
+    def test_select_parser_unsupported_returns_none(self, db_session, mock_vectordb, mock_embedder):
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
         assert pipeline._select_parser(".xyz") is None
         assert pipeline._select_parser(".exe") is None
         assert pipeline._select_parser("") is None
 
     @pytest.mark.asyncio
-    async def test_ingest_new_text_file(
-        self, db_session, mock_vectordb, mock_embedder, tmp_path
-    ):
+    async def test_ingest_new_text_file(self, db_session, mock_vectordb, mock_embedder, tmp_path):
         project = await self._create_project(db_session)
         path = self._write_file(tmp_path, "readme.md", "# Hello World\n\nSome content.")
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
@@ -576,9 +574,7 @@ class TestIngestionPipeline:
         assert records[0]["project_id"] == project.id
 
     @pytest.mark.asyncio
-    async def test_ingest_new_python_file(
-        self, db_session, mock_vectordb, mock_embedder, tmp_path
-    ):
+    async def test_ingest_new_python_file(self, db_session, mock_vectordb, mock_embedder, tmp_path):
         project = await self._create_project(db_session)
         code = "def hello():\n    print('hi')\n\ndef world():\n    print('world')\n"
         path = self._write_file(tmp_path, "app.py", code)
@@ -658,9 +654,7 @@ class TestIngestionPipeline:
         path = self._write_file(tmp_path, "large.md", "version 1 content")
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
 
-        first = await pipeline.ingest_file(
-            project_id=project.id, file_path=path, storage_path=path
-        )
+        first = await pipeline.ingest_file(project_id=project.id, file_path=path, storage_path=path)
         assert first.file_id
 
         first_page = [{"id": f"old-{i}"} for i in range(_VECTOR_ID_PAGE_SIZE)]
@@ -668,9 +662,7 @@ class TestIngestionPipeline:
         mock_vectordb.get_by_filter.side_effect = [first_page, second_page]
 
         self._write_file(tmp_path, "large.md", "version 2 changed")
-        await pipeline.ingest_file(
-            project_id=project.id, file_path=path, storage_path=path
-        )
+        await pipeline.ingest_file(project_id=project.id, file_path=path, storage_path=path)
 
         assert mock_vectordb.get_by_filter.call_count == 2
         first_call = mock_vectordb.get_by_filter.call_args_list[0]
@@ -757,9 +749,7 @@ class TestIngestionPipeline:
         assert not result.errors
 
     @pytest.mark.asyncio
-    async def test_vector_record_fields(
-        self, db_session, mock_vectordb, mock_embedder, tmp_path
-    ):
+    async def test_vector_record_fields(self, db_session, mock_vectordb, mock_embedder, tmp_path):
         """Verify the shape of records passed to vectordb.add()."""
         project = await self._create_project(db_session)
         path = self._write_file(tmp_path, "check.md", "Some text for checking")
@@ -773,9 +763,19 @@ class TestIngestionPipeline:
         records = mock_vectordb.add.call_args[0][0]
         rec = records[0]
         expected_keys = {
-            "id", "vector", "project_id", "source_type", "source_id",
-            "filename", "original_path", "file_type", "chunk_index",
-            "chunk_text", "language", "tags", "content_hash",
+            "id",
+            "vector",
+            "project_id",
+            "source_type",
+            "source_id",
+            "filename",
+            "original_path",
+            "file_type",
+            "chunk_index",
+            "chunk_text",
+            "language",
+            "tags",
+            "content_hash",
             "section_header",
         }
         assert set(rec.keys()) == expected_keys
@@ -842,9 +842,7 @@ class TestIngestionPipeline:
         assert "bad.dll" not in filenames
         assert "image.png" not in filenames
 
-    def test_walk_directory_empty_dir(
-        self, db_session, mock_vectordb, mock_embedder, tmp_path
-    ):
+    def test_walk_directory_empty_dir(self, db_session, mock_vectordb, mock_embedder, tmp_path):
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
         result = pipeline._walk_directory(str(tmp_path))
         assert result == []
@@ -920,9 +918,7 @@ class TestIngestionPipeline:
         assert "LanceDB write error" in result.errors[0]
 
         # File record should still exist in DB (not rolled back)
-        row = await db_session.execute(
-            sa_select(File).where(File.id == result.file_id)
-        )
+        row = await db_session.execute(sa_select(File).where(File.id == result.file_id))
         file_record = row.scalar_one_or_none()
         assert file_record is not None
         assert file_record.filename == "fail.md"
@@ -946,6 +942,7 @@ class TestIngestionPipeline:
 
         # Change content
         self._write_file(tmp_path, "evolve.md", "version 2 different")
+
         # Make vectordb.add fail during re-ingestion.
         async def add_side_effect(*args, **kwargs):
             raise RuntimeError("LanceDB failure on re-add")
@@ -980,9 +977,7 @@ class TestIngestionPipeline:
         assert result.file_id == ""
 
     @pytest.mark.asyncio
-    async def test_ingest_directory_basic(
-        self, db_session, mock_vectordb, mock_embedder, tmp_path
-    ):
+    async def test_ingest_directory_basic(self, db_session, mock_vectordb, mock_embedder, tmp_path):
         project = await self._create_project(db_session)
         (tmp_path / "src").mkdir()
         self._write_file(tmp_path / "src", "main.py", "def main(): pass")
@@ -1020,9 +1015,18 @@ class TestIngestionPipeline:
 
     def test_ignore_dirs_contains_expected_entries(self):
         expected = {
-            "node_modules", "__pycache__", ".git", ".venv", "venv",
-            "dist", "build", ".next", ".tox", ".mypy_cache",
-            ".pytest_cache", "egg-info",
+            "node_modules",
+            "__pycache__",
+            ".git",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".next",
+            ".tox",
+            ".mypy_cache",
+            ".pytest_cache",
+            "egg-info",
         }
         assert IGNORE_DIRS == expected
 
@@ -1053,15 +1057,11 @@ class TestIngestionPipeline:
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
 
         # Search for "app.py" with is_managed=False should NOT find the managed file
-        result = await pipeline._find_existing_file(
-            project.id, "app.py", is_managed=False
-        )
+        result = await pipeline._find_existing_file(project.id, "app.py", is_managed=False)
         assert result is None
 
         # Search for "app.py" with is_managed=True SHOULD find the managed file
-        result = await pipeline._find_existing_file(
-            project.id, "app.py", is_managed=True
-        )
+        result = await pipeline._find_existing_file(project.id, "app.py", is_managed=True)
         assert result is not None
         assert result.id == managed_file.id
 
@@ -1073,32 +1073,32 @@ class TestIngestionPipeline:
 
         project = await self._create_project(db_session)
 
-        db_session.add_all([
-            File(
-                project_id=project.id,
-                filename="duplicate.py",
-                original_path=None,
-                storage_path="/uploads/duplicate-1.py",
-                file_type="py",
-                file_size=100,
-                checksum="checksum-1",
-                is_managed=True,
-            ),
-            File(
-                project_id=project.id,
-                filename="duplicate.py",
-                original_path=None,
-                storage_path="/uploads/duplicate-2.py",
-                file_type="py",
-                file_size=100,
-                checksum="checksum-2",
-                is_managed=True,
-            ),
-        ])
+        db_session.add_all(
+            [
+                File(
+                    project_id=project.id,
+                    filename="duplicate.py",
+                    original_path=None,
+                    storage_path="/uploads/duplicate-1.py",
+                    file_type="py",
+                    file_size=100,
+                    checksum="checksum-1",
+                    is_managed=True,
+                ),
+                File(
+                    project_id=project.id,
+                    filename="duplicate.py",
+                    original_path=None,
+                    storage_path="/uploads/duplicate-2.py",
+                    file_type="py",
+                    file_size=100,
+                    checksum="checksum-2",
+                    is_managed=True,
+                ),
+            ]
+        )
         await db_session.commit()
 
         pipeline = IngestionPipeline(db_session, mock_vectordb, mock_embedder)
-        result = await pipeline._find_existing_file(
-            project.id, "duplicate.py", is_managed=True
-        )
+        result = await pipeline._find_existing_file(project.id, "duplicate.py", is_managed=True)
         assert result is None

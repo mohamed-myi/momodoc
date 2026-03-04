@@ -162,6 +162,7 @@ class TestEmbedderMatryoshkaTruncation:
         mock_st_cls.return_value = model
 
         from app.services.ingestion.embedder import Embedder
+
         Embedder("nomic-ai/nomic-embed-text-v1.5", dimension=256)
 
         assert model.truncate_dim == 256
@@ -174,6 +175,7 @@ class TestEmbedderMatryoshkaTruncation:
         mock_st_cls.return_value = model
 
         from app.services.ingestion.embedder import Embedder
+
         Embedder("nomic-ai/nomic-embed-text-v1.5", dimension=768)
 
         assert not hasattr(model, "truncate_dim")

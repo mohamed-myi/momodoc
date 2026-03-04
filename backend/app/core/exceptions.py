@@ -15,8 +15,7 @@ class LLMNotConfiguredError(Exception):
     def __init__(self, provider: str | None = None):
         if provider:
             msg = (
-                f"LLM provider '{provider}' is not configured. "
-                "Check your API key in the .env file."
+                f"LLM provider '{provider}' is not configured. Check your API key in the .env file."
             )
         else:
             msg = (

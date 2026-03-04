@@ -10,12 +10,8 @@ from app.core.database import Base
 class File(Base):
     __tablename__ = "files"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id"), nullable=False
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id"), nullable=False)
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     original_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
