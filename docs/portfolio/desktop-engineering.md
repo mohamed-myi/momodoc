@@ -1,121 +1,204 @@
 # Desktop Engineering
 
+Last verified against source on 2026-03-04.
+
+## Main Responsibilities
+
+The Electron app is not just a shell for the web UI. The desktop runtime currently owns:
+
+- backend sidecar lifecycle
+- tray, global shortcut, and overlay windows
+- onboarding and desktop-only settings
+- diagnostics and local log access
+- packaged-build update checks
+- startup profile orchestration
+
 ## Sidecar Lifecycle
 
-The desktop app does not embed the Python backend. Instead, it manages it as a sidecar process: a child process that the Electron main process starts, monitors, and stops.
+The Electron main process manages backend lifecycle through `SidecarManager`.
 
-### Startup sequence
+Current behavior:
 
-1. Check for an already-running backend (health check at `/api/v1/health`)
-2. If found and healthy, reuse it (read port/token from data directory files)
-3. If not found, resolve the launch command:
-   - Packaged builds: bundled `backend-runtime/run-backend.sh` (no PATH dependency)
-   - Dev builds: `momodoc serve` from PATH
-4. Spawn the backend process (detached, with config-derived environment variables)
-5. Poll health endpoint until ready (30-second timeout)
-6. Read `session.token` and `momodoc.port` from data directory
-7. Publish backend-ready status to renderer
+1. check whether a healthy backend already exists
+2. if needed, inspect stale PID state and recover
+3. resolve a launch command
+4. spawn the backend detached with config-derived environment variables
+5. wait up to 30 seconds for readiness
+6. publish backend-ready or backend-failed state to the renderer
 
-### Shared lifecycle core
+The sidecar tracks ownership. On shutdown it only stops a backend process it started itself.
 
-The sidecar logic is shared between the desktop app and the VS Code extension via `sidecarLifecycleCore.ts`. Both clients need the same capabilities (start, stop, health check, token/port reading) but differ in their logging and process management. The shared core provides the lifecycle state machine while each client provides its own logger and process spawner.
+## Shared Lifecycle Core
 
-### Ownership tracking
+Desktop and VS Code reuse `extension/src/shared/sidecarLifecycleCore.ts`.
 
-The sidecar manager tracks whether it started the backend or discovered an existing one. On shutdown, it only stops processes it owns. This prevents the desktop app from killing a backend that the user started manually via `make serve`.
+That shared core handles:
 
-### Graceful shutdown
+- health polling
+- token and port reading
+- managed-child tracking
+- graceful stop logic
 
-Shutdown follows a deterministic sequence in `shutdown.ts`:
-1. Unregister global shortcuts
-2. Stop updater
-3. Destroy overlay and tray
-4. Stop sidecar (if owned)
-5. Exit
+Desktop and extension differ in process launch strategy and logging, but the state machine is shared.
 
-This ordering prevents UI artifacts (overlay flashing, tray menu appearing after quit) and ensures the backend process is the last thing stopped.
+## Bundled Runtime Versus Dev Runtime
 
-## Domain-Split IPC
+Desktop launch behavior depends on packaging state.
 
-IPC between the Electron main and renderer processes is organized by domain rather than in a monolithic handler:
+### Packaged builds
 
-| Module | Channels | Purpose |
-|--------|----------|---------|
-| `ipc/backend.ts` | `get-backend-url`, `get-token`, `get-backend-status`, `restart-backend` | Backend connectivity |
-| `ipc/settings.ts` | `get-settings`, `update-settings` | Desktop config store read/write |
-| `ipc/overlay.ts` | `toggle-overlay`, `expand-overlay`, `collapse-overlay` | Overlay window control |
-| `ipc/window.ts` | `open-main-window`, `select-directory`, `open-web-ui`, minimize/maximize/close | Window management |
-| `ipc/updater.ts` | Update check, download, install | Auto-updater control |
-| `ipc/diagnostics.ts` | Diagnostic report generation | Health and debug info |
+The app resolves a bundled backend launcher from `process.resourcesPath/backend-runtime/`.
 
-All handlers receive a shared `IpcDeps` object containing references to `mainWindow`, `sidecar`, `configStore`, `overlay`, and `updater`. Registration is centralized in `ipc.ts`.
+That runtime is produced by:
 
-This pattern keeps each IPC domain self-contained and testable. Adding a new IPC channel means adding a handler to the appropriate domain module and registering it in the central orchestrator.
+- `desktop/scripts/stage-backend-runtime.mjs`
+- `electron-builder` `extraResources`
 
-## Window Factory
+### Development builds
 
-`window-factory.ts` encapsulates all window creation logic:
+The app starts:
 
-- Restores saved window bounds from config (position + size)
-- Debounced save (500ms) on move/resize to avoid config store thrashing
-- macOS hidden title bar (`titleBarStyle: 'hiddenInset'`)
-- `ready-to-show` gate: window is created hidden and only shown after content loads
-- Returns a `MainWindowHandle` with the window instance and a cleanup function
+- `momodoc serve`
 
-In dev mode, the window loads from the Vite dev server (`http://localhost:5173`). In production, it loads from the bundled `dist/index.html`.
+from the surrounding environment.
 
-On macOS, closing the window hides it to the tray (if tray is enabled) instead of quitting, unless the app is actually quitting. This matches macOS conventions.
+This split is one of the most important desktop engineering boundaries in the repo.
+
+## Startup Profiles
+
+Desktop launch behavior is configurable through startup profiles:
+
+- `desktop`
+- `desktopOverlay`
+- `desktopWeb`
+- `vscodeCompanion`
+- `custom`
+
+The runtime resolves conflicts before launch, for example:
+
+- tray-minimized startup disables visible main-window startup
+- tray-minimized startup falls back to visible main-window startup if the tray is disabled
+- a profile that would expose no visible surface is corrected to open the main window
+
+## Main Runtime Sequence
+
+At app startup, the Electron main process currently:
+
+1. loads config
+2. resolves startup profile warnings and targets
+3. creates the sidecar manager
+4. creates the hidden main window
+5. registers IPC handlers
+6. starts the backend if enabled
+7. applies window visibility behavior
+8. creates the tray if enabled
+9. registers the global shortcut
+10. starts the updater in packaged builds
+11. applies auto-launch settings
+12. runs optional overlay, browser, and VS Code launch actions
+
+This is a real orchestration layer, not a thin boot script.
+
+## IPC Structure
+
+IPC is split by domain rather than handled in one file.
+
+Current modules include:
+
+- `ipc/backend.ts`
+- `ipc/settings.ts`
+- `ipc/overlay.ts`
+- `ipc/window.ts`
+- `ipc/updater.ts`
+- `ipc/diagnostics.ts`
+- `ipc/shared.ts`
+
+Handlers receive a shared dependency bundle containing references such as:
+
+- `mainWindow`
+- `sidecar`
+- `configStore`
+- `overlay`
+- `updater`
+
+## Window Model
+
+Desktop uses multiple windows:
+
+- main application window
+- overlay window
+
+The main window:
+
+- starts hidden
+- restores saved bounds
+- saves bounds with a debounce
+- hides instead of quitting on close when tray behavior is active
+
+The overlay window:
+
+- is always-on-top
+- frameless and transparent
+- starts collapsed
+- can expand for chat
 
 ## Overlay Chat
 
-The overlay is a separate Electron `BrowserWindow` with specific properties:
+The overlay is intentionally global rather than project-scoped.
 
-| Property | Value | Why |
-|----------|-------|-----|
-| Always on top | true | Must float above other windows |
-| Frameless | true | Custom UI chrome, no title bar |
-| Transparent | true | Rounded corners, shadow effects |
-| Resizable | false | Fixed dimensions (500x60 collapsed, 500x500 expanded) |
-| Skip taskbar | true | Should not appear in alt-tab |
+Current behavior:
 
-The overlay loads a separate entry point (`overlay.html` / `overlay-main.tsx`) that renders `OverlayChat`, a dedicated React component. It uses global chat sessions (`/api/v1/chat/sessions/...`) rather than project-scoped sessions, since the overlay is meant for quick cross-project queries.
+- it is toggled by a global shortcut
+- it talks to global chat sessions, not project chat sessions
+- it can open the full application window when the interaction needs more context
 
-Interaction flow:
-1. Global hotkey (`CommandOrControl+Shift+Space`) toggles visibility
-2. Starts collapsed (input bar only)
-3. Auto-expands on first message send
-4. `Esc` collapses if expanded, hides if collapsed
-5. "Open full app" button in footer focuses the main window
+That design keeps the overlay optimized for quick cross-project retrieval and chat.
 
-## Shared UI Layer
+## Shared Renderer Strategy
 
-The web frontend and desktop renderer share a single source of truth for UI components:
+Most feature UI is shared between the web frontend and the desktop renderer through:
 
-```
-frontend/src/shared/renderer/
-    components/          (UnifiedSearchChat, ProjectView, FilesSection, etc.)
-    components/ui/       (button, card, input, select, etc.)
-    lib/                 (apiClientCore, momodocSse, types, hooks, utils)
-    app/globals-core.css (shared CSS tokens)
-```
+- `frontend/src/shared/renderer/components`
+- `frontend/src/shared/renderer/lib`
+- `frontend/src/shared/renderer/app/globals-core.css`
 
-Both `frontend/src/components/` and `desktop/src/renderer/components/` contain thin re-export wrappers.
+Desktop-specific renderer code adds shell capabilities such as:
 
-### Bootstrap pattern
+- startup recovery screen
+- updater status wiring
+- diagnostics integration
+- onboarding modal
+- metrics view
+- What’s New modal
 
-The shared API client (`apiClientCore.ts`) requires a bootstrap object that provides `getBaseUrl()` and `getToken()`. Each client supplies its own:
+The shared component tree remains mostly environment-agnostic by using a bootstrap API layer.
 
-- **Web frontend**: `getBaseUrl = ""` (same origin), `getToken` from `GET /api/v1/token`
-- **Desktop**: `getBaseUrl` and `getToken` from `window.momodoc.getBackendUrl()` and `getToken()` (IPC to main process)
+## Diagnostics And Recovery
 
-This means the entire shared component tree is environment-agnostic. It does not know if it is running in a browser or in Electron.
+Desktop engineering includes explicit failure recovery UX.
 
-## Backend Runtime Bundling
+When backend startup fails, the renderer can show:
 
-Packaged desktop builds bundle the Python backend runtime so users do not need Python installed:
+- classified startup messaging
+- raw details behind a toggle
+- retry
+- open settings
+- open logs folder
+- open data folder
+- copy diagnostics
 
-1. `stage-backend-runtime.mjs` copies the backend `.venv` into a staging directory
-2. `electron-builder` packages it as `extraResources`
-3. At runtime, the sidecar resolves the bundled launcher script
+This is implemented as part of the desktop shell, not the shared web UI.
 
-The current approach stages the local `.venv`, which is machine-specific (Python interpreter symlinks may not be portable). This is sufficient for local packaged builds and validating the PATH-free experience. Cross-machine portability would require OS-specific self-contained Python bundles or standalone binaries.
+## Updater Model
+
+The updater exists only in packaged builds.
+
+Current policy:
+
+- stable channel only
+- no prereleases
+- no downgrades
+- update download is manual after discovery
+- install occurs on quit or through explicit install action
+
+That behavior is controlled in `desktop/src/main/updater.ts`.

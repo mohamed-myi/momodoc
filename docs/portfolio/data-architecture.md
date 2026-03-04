@@ -1,98 +1,142 @@
 # Data Architecture
 
-## Dual-Store Design
+Last verified against source on 2026-03-04.
 
-Momodoc splits data across two embedded stores, each chosen for what it does best:
+## Two Embedded Stores
 
-| Store | Purpose | Why |
-|-------|---------|-----|
-| SQLite | Relational metadata (projects, files, notes, issues, chat, sync jobs) | ACID transactions, foreign keys, cascade deletes, zero-config |
-| LanceDB | Vector embeddings and chunk text | ANN search, built-in FTS (Tantivy), SQL-like filtering, persistent storage |
+Momodoc splits persistence across two local stores with different responsibilities.
 
-### Why not one store for everything?
+| Store | Holds | Why |
+|---|---|---|
+| SQLite | entities, chat history, sync jobs, system configuration markers | relational integrity, migrations, transactions |
+| LanceDB | chunk text, vectors, retrieval metadata | vector search, FTS, metadata-filtered retrieval |
 
-Relational operations (project CRUD, chat session management, sync job tracking with status updates and error recording) require transactions, joins, and foreign key constraints. Vector databases are not designed for these workloads.
+The split follows workload, not fashion.
 
-Conversely, storing embeddings in SQLite would mean loading vectors into memory for similarity search or implementing custom ANN indexing. LanceDB handles this natively with IVF-PQ indexing.
+## What Lives In SQLite
 
-The cost of the dual-store approach is coordinating deletions across two systems. This is addressed by the deletion strategy described below.
+SQLite currently stores:
 
-## No Chunks Table in SQLite
+- projects
+- files
+- notes
+- issues
+- chat sessions
+- chat messages
+- persisted `message_sources`
+- sync jobs
+- sync errors
+- `system_config`
 
-A deliberate design choice: there is no `chunks` table in SQLite. All chunk metadata (text, index, source reference, language, tags, content hash) lives as fields in LanceDB records alongside the embedding vector.
+SQLite is the source of truth for entity existence and workflow state.
 
-This avoids:
-- A join between SQLite and LanceDB on every search query
-- Synchronization complexity when chunks are added or deleted
-- Duplication of chunk text in two stores
+## What Lives In LanceDB
 
-The tradeoff is that non-vector queries about chunks (listing all chunks for a file) must go through LanceDB's metadata filtering rather than a SQL query. LanceDB's `get_by_filter()` method handles this, but it is not as flexible as SQL joins.
+LanceDB stores the `chunks` table.
 
-Chunk counts are stored on the parent entity (files, notes, issues) in SQLite for efficient display without querying LanceDB.
+Current schema fields:
 
-## SQLite Configuration
+- `id`
+- `vector`
+- `project_id`
+- `source_type`
+- `source_id`
+- `filename`
+- `original_path`
+- `file_type`
+- `chunk_index`
+- `chunk_text`
+- `language`
+- `tags`
+- `content_hash`
+- `section_header`
 
-- **WAL mode**: Enables concurrent reads during writes. Important during sync jobs where the UI reads project listings while the sync writes file metadata.
-- **Foreign keys ON**: Enforced at the connection level. Cascade deletes on project -> files, notes, issues, chat sessions, sync jobs.
-- **5-second busy timeout**: Prevents immediate failures during contention.
-- **Connection pool**: Configurable `DB_POOL_SIZE` (default 5) and `DB_MAX_OVERFLOW` (default 10) via SQLAlchemy async engine.
+This table contains enough metadata for retrieval results to be self-describing without a mandatory SQLite join.
 
-## LanceDB Schema
+## Why There Is No SQLite Chunks Table
 
-Single table: `chunks`. Schema (PyArrow):
+The codebase intentionally keeps chunk rows out of SQLite.
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `id` | string | UUID of the chunk |
-| `vector` | list\<float32\>[384] | Embedding vector |
-| `project_id` | string | Scopes searches to a project |
-| `source_type` | string | `"file"`, `"note"`, or `"issue"` |
-| `source_id` | string | UUID of the parent entity |
-| `filename` | string | Original filename |
-| `original_path` | string | Full filesystem path |
-| `file_type` | string | Extension without dot |
-| `chunk_index` | int32 | Position within source |
-| `chunk_text` | string | The actual text content |
-| `language` | string | Programming language (code files) |
-| `tags` | string | JSON-encoded tag list |
-| `content_hash` | string | SHA-256 prefix (16 chars) for deduplication |
+Reasoning reflected in the implementation:
 
-LanceDB uses L2 distance with scores converted to similarity via `1.0 - distance`. An IVF-PQ index is built when the table exceeds ~10k rows. UUID-validated filter helpers (`filter_by_project()`, `filter_by_source()`) prevent SQL injection in filter string construction.
+- search results should already include the text that matched
+- chat citations need chunk-level metadata immediately
+- retrieval should not require a second round-trip into SQL just to render a result
 
-## AsyncVectorStore: Concurrency Control
+The tradeoff is that chunk maintenance and filtering happen through LanceDB APIs instead of relational queries.
 
-LanceDB is synchronous. The backend is async. Bridging this gap without introducing data corruption or deadlocks required a purpose-built wrapper.
+## Summary Fields In SQLite
 
-`AsyncVectorStore` wraps the synchronous `VectorStore` with three concurrency mechanisms:
+Although chunk rows do not live in SQL, parent entities still carry summary metadata:
 
-### Dedicated ThreadPoolExecutor
+- `File.chunk_count`
+- `Note.chunk_count`
+- `Issue.chunk_count`
 
-All LanceDB I/O runs on a dedicated executor (configurable via `VECTORDB_MAX_WORKERS`, default scales with CPU count). This isolates LanceDB operations from the main event loop and from other CPU-bound work (embedding, file parsing) that uses separate executors.
+That supports UI summaries without hitting LanceDB for simple counts.
 
-### Bounded read concurrency
+## Async Concurrency Boundary
 
-An `asyncio.Semaphore` (configurable via `VECTORDB_MAX_READ_CONCURRENCY`) limits how many concurrent reads can execute. Without this, a burst of search requests during a sync job could saturate the executor and starve write operations.
+LanceDB itself is synchronous. The backend is async. `AsyncVectorStore` is the coordination layer between them.
 
-### Writer-exclusive coordination
+Current responsibilities:
 
-An `asyncio.Lock` provides writer-exclusive access. When a write operation (add, delete) acquires the lock, all pending reads wait. This prevents reads from seeing partially-written data.
+- run LanceDB work in a dedicated `ThreadPoolExecutor`
+- cap concurrent reads with a semaphore
+- serialize writes with a writer-preferring async read/write lock
 
-The combination means: multiple reads can execute concurrently (up to the semaphore limit), but writes are serialized and exclusive. This matches the workload: reads are frequent (search, chat), writes are batched (ingestion, sync).
+This is more than an `asyncio.to_thread()` wrapper. It prevents search-heavy workloads from starving writes and isolates vector work from other executor-bound tasks.
+
+## Query And Index Behavior
+
+Current `VectorStore` behavior includes:
+
+- validation of UUID-based filters before building filter strings
+- normalization of positive limits to protect LanceDB queries
+- automatic normalization of nullable string metadata on insert
+- opportunistic ANN index creation once the table becomes large enough
+- FTS index creation on `chunk_text`
+
+ANN index creation currently waits for enough rows, then prefers `IVF_HNSW_SQ` and falls back when necessary.
 
 ## Deletion Strategy
 
-Deletions follow a DB-first pattern:
+Deletes are deliberately DB-first.
 
-1. Commit the SQLite deletion first (with cascade for child records)
-2. Delete vectors from LanceDB (best-effort)
-3. Remove files from disk (best-effort, uploads only)
+Current ordering:
 
-If the SQLite commit fails, nothing has changed (safe rollback). If vector or disk cleanup fails afterward, only harmless orphaned data remains. A startup maintenance task (`cleanup_orphaned_vectors`) scans for orphaned vectors and removes them.
+1. commit SQL deletion first
+2. attempt LanceDB cleanup afterward
+3. remove uploaded file contents afterward when relevant
 
-This ordering prevents the more confusing failure mode: a user sees a record in the UI but search cannot find its content (which would happen if vectors were deleted first and the DB commit then failed).
+That keeps the user-facing system of record coherent even if LanceDB cleanup fails. The cost is temporary orphaned vectors.
 
-## Embedding Model Safety
+## Orphan Cleanup
 
-On first startup, the active embedding model name is stored in the `system_config` table. On every subsequent startup, the configured model is verified against the stored value. If they differ, the app raises `EmbeddingModelMismatchError` and refuses to start.
+To support the DB-first deletion model, deferred startup runs orphan cleanup.
 
-This prevents silent vector space mismatches where old vectors (from model A) and new vectors (from model B) coexist in the same table. Since different models produce incompatible embedding spaces, search results would be meaningless. The only way to change models is to re-index all data, which is a deliberate action.
+It currently removes:
+
+- vectors belonging to deleted projects
+- vectors whose `source_id` no longer exists in `files`, `notes`, or `issues`
+
+This keeps best-effort cleanup from turning into permanent retrieval drift.
+
+## Embedding Model Migration
+
+`system_config` records the embedding model used for indexing under the `embedding_model` key.
+
+At startup:
+
+1. the configured embedding model is compared to the stored one
+2. if the model changed, LanceDB is reset
+3. `chunk_count` is reset to `0` for files, notes, and issues
+4. deferred startup re-launches auto-sync for projects with `source_directory`
+
+This avoids silently mixing incompatible vector spaces.
+
+Important limitation:
+
+- manually uploaded files, notes, and issues are not automatically reindexed just because the vector table was reset
+
+Their metadata remains in SQLite, but retrieval coverage returns only after later re-indexing activity.

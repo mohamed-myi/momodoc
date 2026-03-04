@@ -1,15 +1,30 @@
-# VS Code Extension Guide
+# VS Code Extension
 
-The Momodoc VS Code extension lets you manage the backend server, ingest files from your editor, and chat with your knowledge base in a sidebar panel.
+Last verified against source on 2026-03-04.
+
+The Momodoc VS Code extension is a project-scoped chat and ingest companion for the local backend.
+
+## What The Extension Currently Does
+
+- starts and stops the backend from VS Code
+- shows backend status in the status bar
+- opens the web UI or settings in the browser
+- ingests a file into a selected project
+- provides a sidebar chat webview for project chat sessions
 
 ## Prerequisites
 
-- Momodoc backend installed (`make momo-install` from the repo root)
-- VS Code 1.85 or later
+- VS Code `1.85` or newer
+- the `momodoc` backend CLI available in your environment if you want the extension to launch the server itself
 
-## Install the Extension
+Important current behavior:
 
-Build and install the `.vsix` package:
+- the extension sidecar launches `momodoc serve`
+- it does not bundle a backend runtime the way packaged desktop builds do
+
+## Building And Installing The Extension
+
+From the repo:
 
 ```bash
 cd extension
@@ -18,76 +33,102 @@ npm run compile
 npm run package
 ```
 
-This produces a `.vsix` file in `extension/`. Install it in VS Code:
-- Open the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`)
-- Click the `...` menu -> `Install from VSIX...`
-- Select the generated `.vsix` file
+That produces a `.vsix` file in `extension/`.
 
-After installation, a Momodoc icon appears in the Activity Bar.
+Install it in VS Code through:
+
+- Extensions view
+- `...`
+- `Install from VSIX...`
 
 ## Commands
 
-Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and type "Momodoc":
+Current contributed commands are:
 
-| Command | What it does |
-|---|---|
-| `Momodoc: Start Server` | Starts the backend process (sidecar) |
-| `Momodoc: Stop Server` | Stops the backend process |
-| `Momodoc: Open Web UI` | Opens the web frontend in your browser |
-| `Momodoc: Ingest File` | Ingests the currently open file into a project |
+- `Momodoc: Start Server`
+- `Momodoc: Stop Server`
+- `Momodoc: Open Web UI`
+- `Momodoc: Ingest File`
+- `Momodoc: Open LLM Settings`
 
-`Momodoc: Ingest File` is also available from the file explorer context menu (right-click a file).
+`Momodoc: Ingest File` also appears in the Explorer context menu for file resources.
 
 ## Status Bar
 
-The extension adds a status bar item at the bottom of VS Code:
+The extension shows a status bar item that polls backend health every 10 seconds.
 
-- Running: `Momodoc` with a check icon. Click to open web UI.
-- Stopped: `Momodoc` with a circle-slash icon. Click to start server.
-- Starting: Shows a spinner while the backend boots.
+Current behavior:
+
+- stopped -> click starts the server
+- starting -> spinner
+- running -> click opens the web UI
 
 ## Sidebar Chat
 
-Click the Momodoc icon in the Activity Bar to open the chat sidebar.
+The sidebar webview is currently project-scoped only.
 
-### Toolbar controls
+Current flow:
 
-- **Project selector**: Choose which project to query. Projects are fetched from the running backend.
-- **Session selector**: Pick an existing chat session or start a new one with `New chat`.
-- **Model selector**: Choose the LLM provider (`Gemini`, `Claude`, `OpenAI`, `Ollama`). Only configured/available providers appear.
-- **New session (+)**: Create a fresh chat session.
+1. choose a project
+2. create or select a chat session
+3. choose an LLM mode
+4. send a message
+5. receive streamed tokens and source links
 
-### Chat behavior
+Source links attempt to open the original file path in the editor when that path is available.
 
-- Chat is **project-scoped**: each conversation is tied to a single project.
-- Responses stream in token-by-token via SSE.
-- Source citations appear below responses. Click a source to open the file in your editor.
-- Your selected project, session, and model persist across VS Code reloads.
+## Persistence
 
-### Tips
+The webview persists these values with VS Code webview state:
 
-- Make sure the backend is running before using chat. Start it with `Momodoc: Start Server` or `make serve` in a terminal.
-- If no projects appear in the selector, create one first using the CLI (`momodoc project create my-project`) or the desktop/web UI.
-- If a provider shows as unavailable, configure its API key in your `.env` file and restart the backend.
+- selected project id
+- selected session id
+- selected LLM mode
 
-## Extension Settings
+That state is restored when the webview reloads.
 
-| Setting | Default | Description |
-|---|---|---|
-| `momodoc.defaultLlmMode` | `gemini` | Default LLM provider for chat (`gemini`, `claude`, `openai`, `ollama`) |
+## Settings
 
-Note: the chat sidebar uses its own persisted model selection (saved in webview state). This setting serves as the initial default.
+The extension contributes:
+
+- `momodoc.defaultLlmMode`
+
+Important current implementation detail:
+
+- this setting exists in `package.json`
+- the current chat webview does not read it
+- the sidebar initializes to `gemini` and then persists the last selected mode in webview state
+
+So the contributed setting is not currently wired into live chat behavior.
 
 ## Troubleshooting
 
-### Chat shows no projects
-- Backend is not running or token/port files are missing.
-- Run `Momodoc: Start Server` from the Command Palette.
+### The extension cannot start the backend
 
-### Extension cannot connect to backend
-- Confirm backend is running: `curl -sf http://127.0.0.1:8000/api/v1/health`
-- Check the Momodoc output channel in VS Code (`View -> Output -> Momodoc`) for sidecar errors.
+Check:
 
-### Ingest File does nothing
-- Backend must be running.
-- The file must have a supported extension (see [Tutorial](tutorial.md) section 6.1 for the full list).
+- `momodoc` is installed and on `PATH`
+- the `Momodoc` output channel in VS Code for sidecar logs
+
+### No projects appear in the chat sidebar
+
+Check:
+
+- the backend is running
+- you already created at least one project
+
+### Ingest File fails
+
+Check:
+
+- the backend is running
+- you selected a project
+- the file type is supported by the ingestion pipeline
+
+### Chat fails or no providers appear
+
+Check:
+
+- the backend can return `/api/v1/llm/providers`
+- your selected provider is configured in backend settings
+- the server is healthy and the token/port files are present

@@ -1,120 +1,169 @@
 # Contributing
 
-## Development Setup
+This guide reflects the current monorepo layout and workspace commands.
 
-### Prerequisites
+## Prerequisites
 
-- Python 3.11+
-- Node.js 18+
+- Python 3.11, 3.12, or 3.13
+- Node.js for the desktop, frontend, and extension workspaces
 
-### Install everything
+## Initial Setup
+
+### Backend and desktop
 
 ```bash
 make momo-install
+```
+
+This currently does two things:
+
+- creates `backend/.venv` and installs `backend/` in editable mode with dev dependencies
+- installs `desktop/` npm dependencies
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+### VS Code extension
+
+```bash
+cd extension
+npm install
+```
+
+### Optional `.env`
+
+```bash
 cp .env.example .env
 ```
 
-This creates `backend/.venv`, installs the backend package (editable, includes the `momodoc` CLI), and installs desktop + frontend Node dependencies.
+You generally need `.env` when:
 
-### Start the backend
+- configuring cloud LLM providers
+- changing the backend bind host/port
+- enabling directory indexing by setting `ALLOWED_INDEX_PATHS`
+- overriding storage or embedding settings
+
+## Running The Project
+
+### Backend
 
 ```bash
-make dev    # with auto-reload (development)
-make serve  # foreground (production-like)
+make dev
+make serve
+make status
+make stop
 ```
 
-### Start the desktop app (dev mode)
+### Desktop
 
 ```bash
 make dev-desktop
+make build-desktop
+make package-desktop
 ```
 
-### Build the web frontend
+### Web frontend
 
 ```bash
-cd frontend && npm install && npm run build
-rm -rf backend/static && cp -R frontend/out backend/static
+cd frontend
+npm run dev
+npm run build
 ```
 
-### Build the VS Code extension
+### VS Code extension
 
 ```bash
-cd extension && npm install && npm run compile && npm run package
+cd extension
+npm run compile
+npm run package
 ```
 
-## Coding Standards
+## Code Organization Expectations
 
-### Backend (Python)
+### Backend
 
-- async/await throughout; type hints on all functions
-- Ruff linting: line-length 100, target py311
-- Strict router -> service -> data layer separation
-- Separate `Create`, `Update`, `Response` Pydantic schemas per resource
-- Updates use `exclude_unset=True` for partial patches
-- UUID4 strings for all entity IDs, UTC `datetime` for all timestamps
-- CPU-bound work offloaded to executors (`asyncio.to_thread()`)
+- Keep routers thin and business logic in services.
+- Add or update Pydantic schemas alongside API changes.
+- Prefer async SQLAlchemy usage and the injected dependencies from `dependencies.py`.
+- Preserve SQLite as the source of truth when coordinating DB and LanceDB mutations.
 
-### Frontend (TypeScript)
+### Frontend and desktop UI
 
-- TypeScript strict mode
-- `"use client"` on all components
-- Path alias `@/*` maps to `./src/*`
-- Shared UI code lives in `frontend/src/shared/renderer/`; client-specific components are thin re-export wrappers
+- Treat `frontend/src/shared/renderer/` as the main reusable UI layer.
+- Keep platform-specific shells and bootstraps in their own workspace trees.
+- Only add `"use client"` where the component actually needs client-side behavior.
 
-### Desktop (Electron + TypeScript)
+### Desktop main process
 
-- Main process logic split across domain modules (sidecar, IPC, window factory, shutdown)
-- IPC handlers organized by domain under `ipc/`
-- Renderer imports shared components from `frontend/src/shared/renderer/`
+- Keep Electron main-process code split by domain under `desktop/src/main/`.
+- Put IPC behavior in the existing domain-specific handler files when possible.
 
-## Running Tests
+### Extension
+
+- Keep VS Code host integration separate from pure helper logic so it stays testable.
+
+## Linting, Typechecking, and Tests
+
+### Backend
 
 ```bash
-make test
+cd backend
+.venv/bin/ruff check app tests
+.venv/bin/pytest
 ```
 
-Tests live in `backend/tests/unit` and `backend/tests/integration`. The suite uses pytest with pytest-asyncio (`asyncio_mode = "auto"`).
-
-### Writing tests
-
-- Integration tests go in `backend/tests/integration/` and use the shared conftest fixtures (async DB session, mock vector store, test client)
-- Unit tests go in `backend/tests/unit/` and mock all external dependencies
-- Cover both the success path and error/edge cases
-
-## Linting
+### Desktop
 
 ```bash
-cd backend && .venv/bin/ruff check app
-cd desktop && npm run lint
-cd extension && npm run compile
+cd desktop
+npm run typecheck
+npm run test:unit
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm run test:unit
+npm run test:e2e
+```
+
+### VS Code extension
+
+```bash
+cd extension
+npm run compile
+npm test
 ```
 
 ## Database Migrations
 
-Migrations auto-run at startup. To create a new migration:
+Alembic migrations auto-run on backend startup.
+
+To add a migration:
 
 ```bash
 cd backend
-alembic revision --autogenerate -m "description of change"
+alembic revision --autogenerate -m "describe change"
 ```
 
-## Environment Configuration
+Review autogenerated migrations carefully before committing them.
 
-All runtime settings are defined in `backend/app/config.py`. Copy `.env.example` to `.env` and configure as needed. Cloud LLM provider keys are optional (only needed for chat features).
+## Directory Indexing Reminder
 
-The `ALLOWED_INDEX_PATHS` setting must be set for directory indexing/sync to work.
+If your change touches project `source_directory`, manual indexing, or sync:
 
-## Useful Make Targets
+- configure `ALLOWED_INDEX_PATHS`
+- test both the happy path and rejection path
+- remember that the backend resolves and validates real paths, not just raw strings
 
-```bash
-make dev              # backend with auto-reload
-make serve            # backend (foreground)
-make stop             # stop running backend
-make status           # check running backend
-make test             # backend pytest suite
-make dev-desktop      # run desktop app in dev mode
-make build-desktop    # desktop compile/build only
-make package-desktop  # package desktop app for current platform
-make clean            # delete momodoc data dir (confirmation required)
-make help             # list all targets
-```
+## Documentation
+
+- Update docs when the runtime behavior, endpoint shape, or operator workflow changes.
+- The codebase is the source of truth; docs should describe current behavior, including current limitations when relevant.

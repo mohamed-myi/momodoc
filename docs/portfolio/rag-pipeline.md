@@ -1,110 +1,214 @@
 # RAG Pipeline
 
-## Overview
+Last verified against source on 2026-03-04.
 
-The ingestion pipeline transforms raw documents into searchable vector embeddings through five stages: parse, chunk, embed, store, and (on query) retrieve. Each stage is designed around a specific set of tradeoffs for a local-first, personal-scale system.
+## End-To-End Shape
 
+Momodoc's retrieval pipeline has two distinct halves:
+
+1. ingestion-time indexing of files, notes, and issues
+2. query-time planning, retrieval, reranking, and chat assembly
+
+```text
+files / notes / issues
+  -> parse or normalize
+  -> chunk
+  -> local embeddings
+  -> LanceDB storage
+  -> query classification
+  -> optional HyDE or decomposition
+  -> keyword / vector / hybrid retrieval
+  -> optional rerank
+  -> search results or chat context with citations
 ```
-File/Note/Issue
-    |
-    v
-Parse (file-type-aware)
-    |
-    v
-Chunk (strategy per content type)
-    |
-    v
-Embed (all-MiniLM-L6-v2, 384 dims)
-    |
-    v
-Store (LanceDB vectors + SQLite metadata)
-    |
-    v
-Retrieve (hybrid: vector + BM25 + RRF)
-```
 
-## Parsing: Registry Pattern
+## Indexed Source Types
 
-Parsers are managed by a `ParserRegistry` that selects the appropriate parser based on file extension. The registry maintains an ordered chain:
+The retrieval table contains three source types:
 
-1. **PdfParser**: Uses pymupdf4llm to convert PDF pages to markdown-formatted text. Preserves structural formatting better than raw text extraction.
-2. **DocxParser**: Uses python-docx to extract paragraph text.
-3. **MarkdownParser**: Handles `.md`, `.markdown`, `.rst`, `.txt`. Reads raw content.
-4. **CodeParser**: Handles 25+ code/config extensions. Reads raw content and detects language from extension.
+- `file`
+- `note`
+- `issue`
 
-The registry pattern decouples parser selection from the pipeline orchestrator. Adding a new parser means implementing the interface and registering it; the pipeline itself does not change.
+Files are the richest path. Notes and issues are simpler indexers that still land in the same `chunks` table, which allows search and chat to span all three source types.
 
-## Chunking: Tree-Sitter with Regex Fallback
+## Ingestion-Time Processing
 
-Chunking strategy is the most architecturally interesting decision in the pipeline. The system uses different strategies based on content type.
+### Files
 
-### Text chunking
+Files pass through:
 
-`TextChunker` uses recursive character splitting with configurable separators (paragraph breaks -> line breaks -> sentence boundaries -> word boundaries). Default: 2000 characters with 200-character overlap. Per-file-type overrides: PDF gets 3000 chars (preserving page context), code gets 2000 chars.
+- parser selection
+- file-type-aware chunking
+- local embedding
+- LanceDB writes
+- SQL metadata updates
 
-### Code chunking (two-tier strategy)
+The pipeline deduplicates by SHA-256 checksum and uses add-then-delete semantics for re-ingestion so search coverage is preserved during updates.
 
-Code files use `TreeSitterChunker` as the primary strategy with `RegexCodeChunker` as a fallback.
+### Notes
 
-**TreeSitterChunker** parses source code into an AST and extracts semantically meaningful units: function definitions, class definitions, method declarations. This produces chunks that align with logical code boundaries rather than arbitrary character positions.
+Notes are chunked with `TextChunker` and indexed directly from note content plus comma-delimited tags.
 
-Grammars are configured for 13 languages (Python, JavaScript, TypeScript, TSX, Java, Go, Rust, C, C++, Ruby, PHP) via a declarative `LANGUAGE_CONFIG` table. Each entry specifies the tree-sitter module, optional language-specific initialization, and the AST node types to extract. Parsers are lazy-loaded and cached.
+### Issues
 
-**RegexCodeChunker** activates when tree-sitter has no grammar for the language or when the AST yields no chunks (configuration files, languages with no function/class definitions). It uses per-language regex patterns to identify definition boundaries, falling back to blank-line splitting.
+Issues are indexed as one combined chunk from title plus description.
 
-### Why this matters
+## Parser And Chunking Strategy
 
-Naive fixed-size chunking produces chunks that split mid-function or mid-paragraph, degrading retrieval quality. A search for "authentication middleware" should retrieve the complete middleware function, not an arbitrary 2000-character window that starts halfway through it. Tree-sitter chunking at definition boundaries makes this possible for supported languages, while the regex fallback ensures every file produces usable chunks.
+Current parser chain:
 
-The tradeoff is complexity: maintaining grammar configurations for 13 languages and handling edge cases (empty files, files with only comments, very large functions that exceed chunk size). The `ChunkingPolicy` orchestrator manages this by selecting the strategy per file and falling back gracefully.
+1. `PdfParser`
+2. `DocxParser`
+3. `MarkdownParser`
+4. `CodeParser`
 
-## Embedding: Local CPU Model
+Current chunking strategy:
 
-The system uses `all-MiniLM-L6-v2` (384 dimensions) from sentence-transformers. This was chosen over API-based embeddings (OpenAI, Cohere) for three reasons:
+- text-like documents -> `SectionAwareTextChunker`
+- code with configured grammar -> `TreeSitterChunker`
+- unsupported or unavailable grammar -> `RegexCodeChunker`
 
-1. **Cost**: Zero marginal cost per embedding. A personal tool ingesting thousands of files would accumulate API costs quickly.
-2. **Latency**: No network round-trip. Embedding a batch of chunks takes milliseconds locally.
-3. **Privacy**: Document content never leaves the machine.
+Chunk-size defaults come from runtime settings:
 
-The tradeoff is quality. MiniLM-L6-v2 ranks lower on MTEB benchmarks than larger models or API embeddings. For personal knowledge management (querying your own documents where you know the vocabulary), this quality gap is less impactful than it would be for a general-purpose search engine.
+- default text: `2000`
+- markdown/text: `2000`
+- code: `2000`
+- PDF: `3000`
+- text overlap: `200`
 
-Embedding runs on CPU with `normalize_embeddings=True` for cosine similarity via L2 distance. Batch processing (default batch size 512) is offloaded to a dedicated `ThreadPoolExecutor` to keep the async event loop responsive during large ingestion jobs.
+## Embeddings
 
-## Deduplication: Checksum-Based Skip
+Embeddings are always local. `Embedder` wraps `SentenceTransformer` and supports a small model registry.
 
-Before parsing a file, the pipeline computes its SHA-256 checksum and compares it to the stored checksum. If they match, the file is skipped entirely. This means re-syncing a 10,000-file directory only processes files that actually changed.
+Current built-in models:
 
-Re-ingestion follows an add-then-delete strategy: new vectors are inserted before old vectors are removed. This prevents a window where a file has zero search results during re-indexing.
+- `nomic-ai/nomic-embed-text-v1.5`
+- `Qwen/Qwen3-Embedding-4B`
+- `all-MiniLM-L6-v2`
 
-## Per-File-Type Chunk Sizing
+Implementation details that matter:
 
-Chunk sizes are configurable per content type:
-- Default: 2000 characters, 200 overlap
-- PDF: 3000 characters (pages contain more contextual density)
-- Code: 2000 characters (functions tend to be shorter)
-- Markdown: 2000 characters
+- embeddings are normalized
+- the embedder supports document-mode and query-mode calls
+- ingestion prepends `section_header` to the embedded text when present
+- indexing batches are limited to 512 chunks at a time
 
-These defaults were tuned empirically for retrieval relevance on personal document collections.
+## Query Classification
 
-## Hybrid Search: Vector + BM25 + Reciprocal Rank Fusion
+Before retrieval, the system classifies the query as:
 
-The retrieval layer supports three search modes:
+- `SIMPLE`
+- `KEYWORD_LOOKUP`
+- `CONCEPTUAL`
+- `MULTI_PART`
 
-### Vector search
-Embedding-based ANN (Approximate Nearest Neighbor) via LanceDB. Best for semantic queries ("how does authentication work?") where the exact keywords may not appear in the document.
+That classification produces a `QueryPlan` with:
 
-### Keyword search
-Tantivy BM25 full-text search via LanceDB's built-in FTS index. Best for exact-match queries ("SessionTokenMiddleware") where you know the precise term.
+- whether HyDE should run
+- whether decomposition should run
+- a search-mode hint
+- optional sub-queries
 
-### Hybrid search (default)
-Combines vector and keyword results using Reciprocal Rank Fusion (RRF). RRF merges two ranked lists by assigning scores based on rank position rather than raw scores, which handles the incomparability between cosine similarity and BM25 scores. This mode handles both semantic and keyword queries well.
+## Retrieval Modes
 
-Score normalization ensures consistent [0, 1] output regardless of search mode: vector distances are converted to similarity, hybrid relevance is clamped, and BM25 scores are transformed.
+The search layer exposes three effective modes:
 
-The FTS index is built asynchronously during deferred startup (after the API is live), so the first few seconds after a cold start may see hybrid search fall back to vector-only. This is an intentional tradeoff: API availability is prioritized over search completeness at startup.
+- `keyword`
+- `vector`
+- `hybrid`
 
-## Directory Traversal and Sync
+Important current behavior:
 
-Directory indexing walks the file tree using a generator-based approach with batch consumption (`next_directory_batch()`). Files are filtered by supported extension and directories are filtered against a deny-list (`node_modules`, `.git`, `.venv`, `__pycache__`, etc.).
+- keyword-like queries can force hybrid requests down to keyword retrieval
+- hybrid is the normal default for search and chat
+- if LanceDB hybrid search fails, `VectorStore.hybrid_search(...)` falls back to vector-only retrieval
 
-Sync jobs are tracked in SQLite with a `JobTracker` that enforces one active job per project. Progress counters (total, processed, skipped, failed) are updated atomically. A filesystem watcher (`watchdog`) on `source_directory` projects handles incremental changes: create/modify triggers re-ingestion, delete removes the record and vectors.
+## HyDE
+
+For conceptual queries, the system can:
+
+1. ask an LLM for a short hypothetical answer passage
+2. embed both the original query and that hypothetical passage
+3. average and normalize the vectors
+4. run vector search with the blended vector
+
+HyDE is only used when a separate query-time LLM is available.
+
+## Query Decomposition
+
+For multi-part queries, the system can:
+
+1. ask an LLM to split the question into 2 to 4 sub-questions
+2. run hybrid retrieval for each sub-query
+3. merge the ranked lists with reciprocal rank fusion using `k=60`
+
+That path is also opportunistic and only runs when a query-time LLM is available.
+
+## Query-Time LLM Resolution
+
+Momodoc does not use the chat provider blindly for HyDE and decomposition.
+
+`query_llm_resolver.py` currently:
+
+1. caches the resolved provider for 60 seconds
+2. tries the configured default provider first unless it is Ollama
+3. falls back to other configured cloud providers
+4. tries Ollama last, but only after a quick health check
+
+If no query-time LLM is available, retrieval still proceeds without HyDE or decomposition.
+
+## Retrieve And Rerank
+
+When the reranker is available and the request is not keyword-only:
+
+1. fetch `candidate_k` retrieval candidates first, default `50`
+2. score query-document pairs with the reranker
+3. return the top `top_k`
+
+Current reranker defaults are hardware-aware:
+
+- CPU-friendly fallback: `cross-encoder/ms-marco-MiniLM-L-6-v2`
+- GPU-capable default: `BAAI/bge-reranker-v2-m3`
+
+## Score Normalization
+
+The retrieval stack normalizes heterogeneous score types into a common 0-to-1 style output:
+
+- vector distance -> `1 / (1 + distance)`
+- hybrid relevance -> clamp LanceDB `_relevance_score` to `[0, 1]`
+- keyword FTS -> `_score / (1 + _score)`
+- reranker logits -> sigmoid
+
+This makes search and chat sources more consistent across modes.
+
+## Chat Context Assembly
+
+Chat adds extra retrieval rules on top of search:
+
+- pinned source ids are fetched directly and included first
+- retrieved chunks already represented by pinned chunks are removed
+- retrieved chunks are capped to at most 3 chunks per source
+- context is trimmed to a token budget inferred from the chosen LLM
+- saved assistant messages persist exact `message_sources` rows for replay and export
+
+The prompt requires citations in `[Source N]` format, and stored sources preserve the exact chunk text supplied to the model.
+
+## Startup Tradeoff
+
+The backend does not wait for all retrieval dependencies before accepting requests.
+
+Deferred startup loads:
+
+- the embedder
+- the reranker
+- the FTS index
+- orphan cleanup
+- auto-sync
+- file watchers
+
+That improves startup responsiveness, but early requests can see temporary degradation:
+
+- embedder unavailable until it loads
+- hybrid search falling back before FTS is ready
+- reranking unavailable until the reranker finishes loading

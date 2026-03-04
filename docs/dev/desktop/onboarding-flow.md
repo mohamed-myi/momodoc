@@ -1,57 +1,40 @@
-# Onboarding Flow (Internal)
+# Desktop Onboarding Flow
 
-Last verified version: `0.1.0` (code-level review + local build/tests, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-## Purpose
+## Source Of Truth
 
-Describe the desktop onboarding state machine, persistence behavior, and how the renderer wizard maps to saved settings.
+- `desktop/src/shared/onboarding.ts`
+- `desktop/src/shared/app-config.ts`
+- `desktop/src/renderer/components/OnboardingWizard.tsx`
+- `desktop/src/renderer/components/App.tsx`
 
-## State Storage
+## Stored State
 
-Onboarding state is persisted in desktop config (`electron-store`) as `config.onboarding`.
+Onboarding is persisted inside desktop config as `config.onboarding`.
 
-Primary schema lives in:
-- `/Users/mohamedibrahim/momodoc/desktop/src/shared/onboarding.ts`
-- `/Users/mohamedibrahim/momodoc/desktop/src/shared/app-config.ts`
+Current schema:
 
-## Onboarding State Model
+- `schemaVersion`
+- `status`
+- `currentStep`
+- `completedAt`
+- `skippedAt`
+- `lastOpenedAt`
+- `draft`
 
-- `status`: `not_started | in_progress | skipped | completed`
-- `currentStep`: numeric index into `ONBOARDING_STEPS`
-- timestamps: `completedAt`, `skippedAt`, `lastOpenedAt`
-- `draft`: persisted draft values for AI mode and first-project creation inputs
+Current schema version:
 
-## Auto-Open Behavior
+- `1`
 
-The desktop shell (`App.tsx`) shows onboarding automatically when:
-- backend is ready, and
-- `shouldAutoOpenOnboarding(settings.onboarding)` is `true`
+## Allowed Status Values
 
-This currently means auto-open for:
 - `not_started`
 - `in_progress`
-
-It does not auto-open for:
 - `skipped`
 - `completed`
 
-## Resume / Reopen / Reset
-
-Users can reopen or reset onboarding from:
-- `Settings -> App Behavior -> Setup Wizard`
-
-Actions:
-- `Resume/Reopen Setup Wizard` -> marks onboarding as opened (`in_progress`)
-- `Reset Onboarding` -> resets to schema defaults (`not_started`, step 0, cleared draft)
-
-## Non-Blocking Recovery Requirement
-
-Onboarding is intentionally non-blocking:
-- users can `Skip for now`
-- onboarding provides `Settings` and `Diagnostics` shortcuts
-- startup failure screen still allows recovery access even when onboarding is not shown
-
-## Step List (Current)
+Current step keys:
 
 1. `welcome`
 2. `folders`
@@ -60,15 +43,140 @@ Onboarding is intentionally non-blocking:
 5. `project`
 6. `summary`
 
-## Mapping: Onboarding -> Saved Settings
+## Draft Payload
 
-- Folders step -> `allowedIndexPaths`
-- AI mode step -> `llmProvider` (except `searchOnly`, which keeps provider config unchanged) + onboarding draft AI mode
-- Startup step -> `startupProfilePreset`, `autoLaunch`, `showInTray`
-- First project step -> creates project via API; stores created project metadata in onboarding draft
-- Finish step -> marks onboarding `completed`
+The onboarding draft currently stores:
 
-## Known Limitations
+- `aiMode`
+- `firstProjectName`
+- `firstProjectSourceDir`
+- `createdProjectId`
+- `createdProjectName`
 
-- Screenshot documentation is pending manual packaged-app capture.
-- `searchOnly` onboarding choice does not currently set a persistent chat default mode; it is recorded in onboarding draft and explained in the wizard.
+Supported onboarding AI modes:
+
+- `searchOnly`
+- `localOllama`
+- `anthropic`
+- `openai`
+- `google`
+
+## Auto-Open Rules
+
+The wizard auto-opens only when all of the following are true:
+
+- desktop settings are loaded
+- the backend is ready
+- `shouldAutoOpenOnboarding(settings.onboarding)` returns true
+
+That helper currently returns true for:
+
+- `not_started`
+- `in_progress`
+
+It does not auto-open for:
+
+- `skipped`
+- `completed`
+
+## State Transitions
+
+Shared helpers implement the main state transitions:
+
+- `markOnboardingOpened(...)`
+- `setOnboardingStep(...)`
+- `skipOnboarding(...)`
+- `completeOnboarding(...)`
+- `resetOnboardingState()`
+- `updateOnboardingDraft(...)`
+
+Important current behavior:
+
+- opening or stepping the wizard keeps it in `in_progress` unless already completed
+- skipping records `skippedAt`
+- completing forces the step index to the final step and clears `skippedAt`
+- resetting returns the full default state
+
+## Step Behavior
+
+### Welcome
+
+Introduces the setup flow and reminds the user that the wizard is non-blocking.
+
+### Folders
+
+Uses the desktop directory picker to append entries to `allowedIndexPaths`.
+
+Notes:
+
+- the app deduplicates chosen paths
+- users can remove allowed paths directly in the wizard
+- continuing with zero allowed folders is permitted, but folder indexing will remain blocked
+
+### AI
+
+Selecting an AI mode updates onboarding draft state and may also change `llmProvider`:
+
+- `localOllama` -> `ollama`
+- `anthropic` -> `claude`
+- `openai` -> `openai`
+- `google` -> `google`
+- `searchOnly` -> no provider change
+
+The wizard does not write API keys. It only points the user toward the matching provider configuration path.
+
+### Startup
+
+This step edits:
+
+- `startupProfilePreset`
+- `autoLaunch`
+- `showInTray`
+
+The available preset options mirror the runtime presets:
+
+- `desktop`
+- `desktopOverlay`
+- `desktopWeb`
+- `vscodeCompanion`
+- `custom`
+
+### First Project
+
+This step can create a project through the frontend API client:
+
+- it requires a project name
+- source folder is optional
+- after creation, the wizard stores the created project id and name in the onboarding draft
+
+### Summary
+
+The final step summarizes:
+
+- allowed folder count
+- selected AI mode
+- startup preset and auto-launch status
+- created project name if one exists
+
+The summary also exposes shortcuts to open:
+
+- the created project
+- the overlay
+- diagnostics
+- settings
+
+## Reopen, Skip, And Reset
+
+The wizard is intentionally non-blocking.
+
+Current recovery paths include:
+
+- `Skip for now` from the wizard
+- reopening from settings
+- resetting onboarding from settings
+- opening settings or diagnostics directly from the wizard
+
+## Known Product Limits
+
+- `searchOnly` is preserved in onboarding draft, but it does not establish a separate persistent chat mode beyond leaving provider settings unchanged.
+- The wizard depends on backend readiness because project creation and settings-backed state updates need the desktop shell to be fully operational.

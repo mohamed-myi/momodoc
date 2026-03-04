@@ -1,37 +1,35 @@
-# Startup Profiles: Schema and Runtime Behavior
+# Startup Profiles And Runtime Behavior
 
-Last verified version: `0.1.0` (code review + tests/build + local runtime smoke, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-## Purpose
-
-Documents the desktop startup profile config contract, defaults, restart semantics, and how settings are executed in the Electron main process.
-
-## Source Files
+## Source Of Truth
 
 - `desktop/src/shared/app-config.ts`
 - `desktop/src/shared/desktop-settings.ts`
-- `desktop/src/main/config-store.ts`
-- `desktop/src/main/app-runtime.ts`
 - `desktop/src/main/startup-profile-runtime.ts`
-- `desktop/src/main/window-factory.ts`
+- `desktop/src/main/app-runtime.ts`
+- `desktop/src/renderer/components/App.tsx`
+- `desktop/tests/startupProfilesConfig.test.ts`
 
-## Schema Fields
+## Config Fields
 
-Top-level config fields:
+Desktop startup behavior is configured with:
+
 - `startupProfilePreset`
 - `startupProfileCustom`
+- `showInTray`
+- `autoLaunch`
 
-### `startupProfilePreset`
+The preset type is:
 
-Type: `desktop` | `desktopOverlay` | `desktopWeb` | `vscodeCompanion` | `custom`
+- `desktop`
+- `desktopOverlay`
+- `desktopWeb`
+- `vscodeCompanion`
+- `custom`
 
-Default: `desktop`
+`startupProfileCustom` uses this shape:
 
-### `startupProfileCustom`
-
-Type: `StartupProfileLaunchTargets`
-
-Fields:
 - `startBackendOnLaunch: boolean`
 - `openMainWindowOnLaunch: boolean`
 - `startMinimizedToTray: boolean`
@@ -40,82 +38,101 @@ Fields:
 - `openVsCodeOnLaunch: boolean`
 - `restoreLastSession: boolean`
 
-Default values: backend starts, main window opens, not minimized to tray, overlay/web/VS Code off, restore last session on.
+Default target values are:
+
+- backend starts on launch
+- main window opens on launch
+- tray-minimized startup is off
+- overlay launch is off
+- web UI launch is off
+- VS Code launch is off
+- last-session restore is on
 
 ## Preset Defaults
 
-Defined in `STARTUP_PROFILE_PRESET_DEFAULTS`:
-- `desktop`: desktop window only (standard startup)
-- `desktopOverlay`: desktop window + overlay
-- `desktopWeb`: desktop window + local web UI in browser
-- `vscodeCompanion`: backend + tray/minimized + VS Code (best effort)
+Current presets resolve to:
 
-## Startup Sequence (Runtime)
+- `desktop`: standard desktop window startup
+- `desktopOverlay`: standard desktop startup plus overlay
+- `desktopWeb`: standard desktop startup plus browser launch of the local web UI
+- `vscodeCompanion`: backend on launch, no main window on launch, minimized to tray, best-effort VS Code launch
+- `custom`: uses the stored `startupProfileCustom` targets after normalization
+
+## Normalization And Migration
+
+`normalizeAppConfig(...)` and `normalizeStartupProfileTargets(...)` ensure:
+
+- missing keys are filled from defaults
+- partial custom target objects are expanded
+- invalid presets fall back to `desktop`
+- onboarding state is normalized at the same time
+
+`ConfigStore` loads normalized config, so older config files remain usable as fields are added.
+
+## Conflict Resolution
+
+`resolveEffectiveStartupProfile(...)` applies two runtime safety rules:
+
+1. If `startMinimizedToTray` is enabled, visible main-window startup is disabled.
+2. If tray-minimized startup is requested while `showInTray` is false, the app falls back to visible main-window startup and records a warning.
+
+There is also a final safety fallback:
+
+- if the resolved profile would open no visible surface at all, the main window is forced back on
+
+## Startup Order
+
+The main process currently starts in this order:
 
 1. Load config from `ConfigStore`
-2. Resolve effective startup profile and conflicts (`resolveEffectiveStartupProfile(...)`)
-3. Create sidecar manager
-4. Create main window (hidden initially; `showOnReady: false`)
+2. Resolve startup profile conflicts and warnings
+3. Create `SidecarManager`
+4. Create the hidden main window
 5. Register IPC handlers
-6. Start backend if enabled by profile
-7. Publish backend status to renderer
-8. Apply main-window visibility behavior
-9. Create tray (if enabled)
-10. Register global shortcut(s)
-11. Start updater (packaged builds)
-12. Apply auto-launch login settings
-13. Best-effort optional startup actions: overlay, web UI in browser, VS Code launch
+6. Start the backend if `startBackendOnLaunch` is true
+7. Notify the renderer of backend readiness or stoppage
+8. Apply window visibility behavior
+9. Create the tray icon if `showInTray` is true
+10. Register the global shortcut
+11. Start the updater for packaged builds
+12. Apply OS auto-launch if `autoLaunch` is true
+13. Run optional overlay, web UI, and VS Code launch actions
 
-## Conflict Handling / Fallbacks
-
-Implemented in `startup-profile-runtime.ts`:
-- `startMinimizedToTray + openMainWindowOnLaunch`: visible main-window startup is disabled when minimized-to-tray is selected
-- hidden startup with tray disabled and no other visible surfaces: falls back to opening the main window (warning is logged)
-
-## Resilience Rules
-
-- Optional action failures do not block core app startup.
-- VS Code and browser launches are best-effort and logged.
-- Backend-disabled profiles skip web UI launch when backend is unavailable.
+Failures in overlay, browser, or VS Code launch are logged but do not abort app startup.
 
 ## Restore Last Session
 
-Runtime contract includes `restoreLastSession`.
+`restoreLastSession` is split across main and renderer behavior.
 
-Current implementation split:
-- main process: startup profile contract + logging
-- renderer shell (`App.tsx`): persists/restores last view/project in localStorage when enabled
+Current reality:
 
-If `restoreLastSession=false`, stored session payload is cleared.
+- the main process carries the setting in the startup profile contract
+- the main process logs `restoreLastSession=false` as a no-op note
+- the renderer implements the actual session restore using `localStorage["momodoc-desktop-last-session-v1"]`
 
-## Migration / Normalization
+The renderer restores:
 
-`normalizeAppConfig(...)` and `normalizeStartupProfileTargets(...)` ensure:
-- missing startup profile fields are filled with defaults
-- older configs remain valid
-- partial `startupProfileCustom` payloads are safely expanded
+- `dashboard`
+- `settings`
+- `metrics`
+- or the last opened project view
 
-`ConfigStore` normalizes stored config on load.
+If the resolved profile disables session restore, the renderer clears the stored session payload instead.
 
-## Restart Semantics
+## Settings That Need Restart Versus Relaunch
 
-These settings are classified as next-launch app behavior (not backend restart):
+`desktop/src/shared/desktop-settings.ts` classifies startup-related settings as next-launch behavior, not backend-restart behavior.
+
+Current next-launch keys:
+
 - `autoLaunch`
 - `globalHotkey`
 - `showInTray`
 - `startupProfilePreset`
 - `startupProfileCustom`
 
-See: `DESKTOP_NEXT_LAUNCH_KEYS`, `changeTakesEffectOnNextLaunch(...)`
+## Operational Notes
 
-## Verification Coverage
-
-Covered by tests: `desktop/tests/startupProfilesConfig.test.ts`
-
-Includes: defaults, preset resolution, custom resolution, migration from old config shape, partial-field normalization, restart semantics helper checks.
-
-## Troubleshooting Notes
-
-- VS Code launch requires `code` command on PATH (best effort)
-- Web UI launch uses configured host/port and opens system browser
-- Tray-minimized startup requires tray icon enabled
+- `desktopWeb` opens `http://<host>:<port>/` in the system browser, using the configured backend host and port.
+- `vscodeCompanion` launches the `code` command best-effort; it assumes VS Code is available on `PATH`.
+- If backend startup is disabled by the profile, web UI launch is skipped because there is no ready backend to serve it.

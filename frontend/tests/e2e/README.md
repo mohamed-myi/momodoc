@@ -1,137 +1,92 @@
 # Frontend E2E Tests
 
-End-to-end tests for the momodoc frontend using Playwright.
+Last verified against source on 2026-03-04.
 
-## Prerequisites
+## Current Scope
 
-1. **Frontend dev server** - Tests run against the Next.js dev server
-2. Playwright installed: `npm install` (already in devDependencies)
+The Playwright suite currently contains:
 
-The browser specs use Playwright route mocks for `/api/v1/**` so they can exercise the current UI deterministically without depending on real backend data or LLM configuration.
+- `dashboard.spec.ts`
+- `search-chat.spec.ts`
+- `support/mockApi.ts`
 
-## Running Tests
+Only the frontend is launched. The tests do not require a real backend because API traffic is mocked.
 
-### Automatic (Recommended)
+## How The Suite Works
 
-Playwright config automatically starts the frontend dev server:
+`frontend/playwright.config.ts` currently:
+
+- runs tests from `frontend/tests/e2e`
+- uses Chromium only
+- starts `npm run dev`
+- serves the app at `http://localhost:3000`
+- injects `NEXT_PUBLIC_API_BASE_URL` from `PLAYWRIGHT_API_BASE_URL` or `http://127.0.0.1:8000`
+- reuses an existing dev server outside CI
+
+Even though an API base URL is configured, `support/mockApi.ts` intercepts `**/api/v1/**` requests and fulfills them with deterministic mocked state.
+
+## Running The Tests
+
+From `frontend/`:
 
 ```bash
 npm run test:e2e
 ```
 
-This will:
-1. Start frontend via `npm run dev` (localhost:3000)
-2. Run all E2E tests
-3. Shut down the dev server after tests complete
-
-### Manual
-
-If you prefer to run servers manually:
-
-```bash
-# Terminal 1: Start frontend
-npm run dev
-
-# Terminal 2: Run tests
-npm run test:e2e
-```
-
-### UI Mode (Interactive)
-
-For debugging and developing tests:
+For Playwright UI mode:
 
 ```bash
 npm run test:e2e:ui
 ```
 
-This opens Playwright's UI mode where you can:
-- Run tests individually
-- See live browser interactions
-- Debug failed tests
-- Time-travel through test steps
+## Mocking Model
 
-## Test Structure
+`support/mockApi.ts` provides an in-browser fake API with mutable state for:
 
-- `dashboard.spec.ts` - Dashboard loading, empty/error states, project navigation
-- `search-chat.spec.ts` - Unified search/chat mode switching, sessions, streaming states
+- projects
+- project files
+- notes
+- issues
+- project chat sessions and messages
+- global chat sessions and messages
+- providers
+- streaming chat responses
 
-## Writing E2E Tests
+This lets the tests exercise the real UI state transitions without depending on:
 
-### Best Practices
+- backend startup
+- local embeddings
+- LLM configuration
+- live network calls
 
-1. **Use data-testid attributes** for reliable selectors:
-   ```tsx
-   <div data-testid="project-card">...</div>
-   ```
+## Writing New Tests
 
-2. **Wait for elements** rather than fixed timeouts:
-   ```ts
-   await expect(page.locator('[data-testid="result"]')).toBeVisible({ timeout: 5000 })
-   ```
+Current guidance that matches the existing suite:
 
-3. **Wait for user-visible state** instead of `networkidle`:
-   ```ts
-   await expect(page.getByRole('heading', { name: 'momodoc' })).toBeVisible()
-   ```
+- prefer route mocks and fixture state over real backend integration
+- assert visible UI states rather than `networkidle`
+- use durable selectors such as roles, labels, placeholders, and `data-testid` where needed
+- keep hover-only controls explicit in the test if you need them
 
-4. **Clean up test data** to avoid test pollution:
-   ```ts
-   test.afterEach(async ({ page }) => {
-     // Delete test project if created
-   })
-   ```
+## Outputs
 
-### Common Patterns
+Playwright is configured with:
 
-**Testing streaming responses:**
-```ts
-const chatInput = page.locator('textarea[placeholder*="message"]')
-await chatInput.fill('Test message')
-await chatInput.press('Enter')
+- HTML reporter
+- trace on first retry
+- screenshots on failure
 
-// Wait for response to start
-const response = page.locator('[data-role="assistant"]').last()
-await expect(response).toBeVisible({ timeout: 10000 })
-```
+Useful commands:
 
-**Testing error states:**
-```ts
-await page.route('**/api/v1/projects', route => {
-  route.fulfill({ status: 500, body: JSON.stringify({ detail: 'Error' }) })
-})
-
-await page.goto('/')
-await expect(page.locator('text=/error/i')).toBeVisible()
-```
-
-## Debugging
-
-### Failed Tests
-
-View HTML report:
 ```bash
 npx playwright show-report
-```
-
-### Screenshots & Videos
-
-Failed tests automatically capture:
-- Screenshots: `test-results/*/screenshot.png`
-- Videos: `test-results/*/video.webm`
-- Traces: `test-results/*/trace.zip`
-
-View trace:
-```bash
-npx playwright show-trace test-results/path/to/trace.zip
+npx playwright show-trace test-results/<path>/trace.zip
 ```
 
 ## Troubleshooting
 
-**Frontend not loading:**
-- Check dev server: `curl http://localhost:3000`
-- Check for port conflicts: `lsof -i :3000`
+If the suite will not start:
 
-**Flaky tests:**
-- Prefer route mocks with explicit fixtures over real backend state
-- Wait for stable UI text, roles, or placeholders instead of fixed timeouts
-- Keep selectors tied to visible controls, not hidden hover affordances unless the test explicitly hovers first
+- confirm `npm install` has been run in `frontend/`
+- confirm port `3000` is available
+- check whether another dev server is already running and conflicting with the expected config

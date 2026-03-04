@@ -1,49 +1,78 @@
-# Desktop Startup Error Taxonomy (Internal)
+# Desktop Startup Error Taxonomy
 
-Last verified version: `0.1.0` (code-level review + local build/tests, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-## Purpose
+## Source Of Truth
 
-Document how desktop backend startup errors are classified and mapped to user-facing recovery messages.
-
-## Source Files
-
-- `/Users/mohamedibrahim/momodoc/desktop/src/main/sidecar.ts`
-- `/Users/mohamedibrahim/momodoc/desktop/src/main/ipc/backend.ts`
-- `/Users/mohamedibrahim/momodoc/desktop/src/renderer/components/App.tsx`
+- `desktop/src/main/sidecar.ts`
+- `desktop/src/main/ipc/backend.ts`
+- `desktop/src/renderer/components/App.tsx`
+- `docs/user/desktop-troubleshooting.md`
 
 ## Main-Process Startup State
 
 `SidecarManager` exposes:
+
 - `startupState`: `idle | starting | ready | failed | stopped`
-- `lastStartupError`: raw error/log-derived string (best effort)
+- `lastStartupError`: best-effort raw error text
 - `lastStartupErrorCategory`: `spawn-error | timeout | port-conflict | runtime-error | unknown | null`
 
-## Renderer Message Mapping
+The backend IPC handler returns those values through `get-backend-status`.
 
-The startup recovery screen in `App.tsx` maps:
-- explicit categories from sidecar (`port-conflict`, `timeout`, `spawn-error`, `runtime-error`)
-- inferred patterns from error text (best effort):
-  - token/auth/unauthorized -> auth-mismatch guidance
-  - migration/sqlite/db text -> migration/data guidance
+## How Categories Are Assigned
 
-## UX Rules
+The sidecar sets categories from current runtime behavior:
 
-- Raw error details are hidden by default behind a `Show details` toggle.
-- Logs and diagnostics are one click away.
-- Recovery actions are shown inline:
-  - Retry
-  - Open Settings
-  - Open Logs
-  - Open Data Folder
-  - Copy Diagnostics
+- `spawn-error`: spawning the backend command throws before readiness polling completes
+- `timeout`: the backend fails readiness within 30 seconds, or a stale existing process stays unhealthy during recovery
+- `port-conflict`: stderr matches `port .*already in use`
+- `runtime-error`: stderr contains `error`
+- `unknown`: fallback when a failure is recorded without a more specific category
 
-## Troubleshooting Doc Link
+## Renderer Fallback Mapping
 
-User-facing mapping and recovery steps live in:
-- `/Users/mohamedibrahim/momodoc/DESKTOP_TROUBLESHOOTING.md`
+When the desktop renderer has no explicit category, `App.tsx` infers two additional support-oriented categories from the error text:
 
-## Known Gaps
+- auth-related text such as `token`, `auth`, `unauthorized`, or `forbidden` becomes `auth-mismatch`
+- migration or database text such as `migrat`, `sqlite`, `database schema`, or `db` becomes `migration-error`
 
-- Not all backend failures are classified in the main process yet (some still fall back to generic runtime guidance).
-- Final screenshot evidence for each startup state is pending packaged-app manual verification.
+Those inferred categories are only used for messaging. They are not emitted by `SidecarManager`.
+
+## When The Recovery Screen Appears
+
+The startup recovery screen is shown when:
+
+- the backend is not ready, and
+- the current view is not `settings`
+
+It presents:
+
+- a headline based on startup state
+- a user-facing recovery message mapped from the category
+- optional raw details behind a `Show details` toggle
+
+## Recovery Actions
+
+The current recovery surface offers:
+
+- `Retry`
+- `Open Settings`
+- `Open Logs`
+- `Open Data Folder`
+- `Copy Diagnostics`
+
+`Retry` calls `restart-backend` over IPC. The other actions use desktop shell helpers so the user can inspect logs and produce a redacted diagnostics report without leaving the app.
+
+## Troubleshooting Docs
+
+The user-facing troubleshooting guide is:
+
+- `docs/user/desktop-troubleshooting.md`
+
+Keep that document aligned with this taxonomy when startup messaging changes.
+
+## Current Gaps
+
+- Startup failure classification is still regex-based in places and can miss specific root causes.
+- `runtime-error` is a broad bucket driven by stderr text, not structured backend error codes.
+- Some failures still surface only as generic raw error text plus `unknown`.

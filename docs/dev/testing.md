@@ -1,153 +1,174 @@
 # Testing
 
-## Stack
+Momodoc currently has tests in four workspaces: backend, frontend, desktop, and extension.
 
-- **pytest** with **pytest-asyncio** (`asyncio_mode = "auto"`)
-- All test functions can be `async def` — no need for manual event loop management
-- Tests live in `backend/tests/`
+## Current Test Matrix
 
-## Layout
+| Workspace | Stack | Source of truth |
+|---|---|---|
+| `backend/` | `pytest`, `pytest-asyncio` | `backend/pyproject.toml`, `backend/tests/` |
+| `frontend/` | `Vitest`, `Playwright` | `frontend/vitest.config.ts`, `frontend/playwright.config.ts`, `frontend/tests/` |
+| `desktop/` | `Vitest` | `desktop/vitest.config.ts`, `desktop/tests/` |
+| `extension/` | Node built-in test runner after TypeScript compile | `extension/package.json`, `extension/src/*.test.ts` |
 
-```
-backend/tests/
-├── conftest.py        # Shared fixtures (DB, mocks, test client)
-├── unit/              # Isolated unit tests
-└── integration/       # Full router-to-service-to-DB tests
-```
+## How To Run Tests
 
-## Running Tests
+### Backend
 
 ```bash
-cd backend && pip install -e ".[dev]" && pytest
-# Or via Makefile:
 make test
+# or
+cd backend
+.venv/bin/pytest
 ```
 
-## Fixtures (conftest.py)
+### Frontend
 
-All shared fixtures are in `backend/tests/conftest.py`:
-
-### Database
-
-| Fixture | What it provides |
-|---------|------------------|
-| `db_engine` | In-memory SQLite async engine with tables created and foreign keys enabled |
-| `db_session` | `AsyncSession` from the in-memory engine (yielded, auto-closes) |
-
-### Mocks
-
-| Fixture | What it mocks | Behavior |
-|---------|---------------|----------|
-| `mock_vectordb` | `VectorStore` (LanceDB wrapper) | `search()`, `hybrid_search()`, `fts_search()`, `get_by_filter()` all return `[]`; `add()`, `delete()`, `create_fts_index()` are no-ops |
-| `mock_embedder` | `Embedder` | Returns zero-vectors (`[0.0] * 384`) for any input |
-| `mock_llm` | `LLMProvider` | `complete()` returns `"Test answer"`, `stream()` yields `["Test ", "answer"]` |
-| `mock_ws_manager` | `WSManager` | `broadcast()` is a no-op, `connect()`/`disconnect()` track connections |
-| `test_settings` | `Settings` | In-memory DB, test data dir, 1MB max upload, test allowed paths |
-
-### Test Client
-
-| Fixture | What it provides |
-|---------|------------------|
-| `client` | `httpx.AsyncClient` with all FastAPI dependencies overridden (DB, VectorStore, Embedder, LLM, Settings) and session token authentication |
-
-The `client` fixture creates a real FastAPI app via `create_app()`, sets `app.state.session_token` to a test token, then overrides all dependencies to use the test fixtures. All requests include the `X-Momodoc-Token` header. This exercises the full request path (middleware → router → service → DB) without any external services.
-
-### Test Token
-
-A constant `TEST_TOKEN` is defined in `conftest.py` and used for:
-- Setting `app.state.session_token` on the test app
-- Including `X-Momodoc-Token` header in the test `AsyncClient`
-
-## Existing Test Coverage
-
-### Unit Tests (`tests/unit/`)
-
-| Test File | Coverage Area |
-|-----------|---------------|
-| `test_core_infrastructure.py` | VectorStore operations, security path validation, dependency providers, middleware, config |
-| `test_ingestion_pipeline.py` | TextChunker, SectionAwareTextChunker, RegexCodeChunker, heading extractor, all 4 parsers (including heading extraction), IngestionPipeline (dedup, re-ingestion, error handling, checksum, vector record shape), TreeSitter chunker |
-| `test_ingestion_registry_policy.py` | `ParserRegistry` ordering/selection, `ChunkingPolicy` file-type dispatch |
-| `test_ingestion_directory_walk.py` | `iter_directory_paths`, `next_directory_batch`, ignore patterns, supported extensions filter |
-| `test_security.py` | Path traversal validation |
-| `test_session_token_middleware.py` | Session token middleware auth logic |
-| `test_upload_limits.py` | Upload size enforcement |
-| `test_file_upload_cleanup.py` | File upload cleanup on errors |
-| `test_embedding_safety.py` | Embedding model consistency checks |
-| `test_token_file_permissions.py` | Token file 0o600 permissions |
-| `test_partial_updates.py` | Partial update behavior (`exclude_unset`) |
-| `test_chat_service.py` | Chat service orchestration, pinned sources, per-source diversity cap, section header display in context |
-| `test_search_service.py` | Search service modes (hybrid/vector/keyword) |
-| `test_vectordb.py` | `VectorStore` operations (add, search, delete, FTS, `get_distinct_column`, `delete_by_ids`, `section_header` field) |
-| `test_sync_service.py` | Sync service (directory sync, progress tracking, error handling) |
-| `test_llm_factory.py` | `ProviderRegistry`, `create_llm_provider()`, provider metadata |
-| `test_llm_providers_streaming.py` | LLM streaming for all providers (Claude, OpenAI, Gemini, Ollama) |
-| `test_content_entity_service_helpers.py` | Shared CRUD lifecycle helpers for notes/issues |
-| `test_retrieval_scoring.py` | Score extraction/normalization helpers, section_header field extraction |
-| `test_rag_evaluation.py` | RAG evaluation metrics (Recall@K, Precision@K, Hit Rate@K, MRR) |
-| `test_ws_manager.py` | WebSocket manager (connect, disconnect, broadcast) |
-| `test_rate_limiter.py` | `ChatRateLimiter` sliding window logic |
-| `test_file_watcher.py` | `ProjectFileWatcher` event handling |
-| `test_embedder_lifecycle.py` | Embedder load/shutdown, thread pool lifecycle |
-| `test_maintenance.py` | Orphaned vector cleanup |
-| `test_job_tracker.py` | `JobTracker` persistence, stale job recovery |
-| `test_architecture_regressions.py` | Structural invariants (import layering, module boundaries) |
-| `test_note_service.py` | Note service CRUD with vector indexing |
-| `test_system_config_service.py` | System config read/write, embedding model enforcement |
-| `test_cli.py` | CLI command group composition, server commands |
-
-### Integration Tests (`tests/integration/`)
-
-| Test File | Coverage Area |
-|-----------|---------------|
-| `test_projects.py` | Project CRUD (create, list, get by ID/name, update, delete) |
-| `test_project_cascade.py` | Project cascade deletion (files, notes, issues, sessions) |
-| `test_issues.py` | Issue CRUD (create, list, filter by status, update, delete) |
-| `test_notes.py` | Note CRUD |
-| `test_chat.py` | Chat sessions and messages |
-| `test_health.py` | Health endpoint |
-| `test_auth.py` | Session token auth (valid, invalid, missing) |
-| `test_file_content_endpoints.py` | File content preview and chunk retrieval |
-| `test_files.py` | File upload, listing, sync endpoints |
-| `test_search_endpoints.py` | Search endpoints (project-scoped, global) |
-| `test_cors.py` | CORS middleware (allowed origins, rejected origins) |
-| `conftest.py` | Integration-specific fixtures |
-
-## Writing New Tests
-
-### Integration Test Pattern
-
-```python
-import pytest
-from httpx import AsyncClient
-
-@pytest.mark.asyncio
-async def test_create_thing(client: AsyncClient):
-    response = await client.post("/api/v1/projects", json={
-        "name": "test-project",
-    })
-    assert response.status_code == 201
-    data = response.json()
-    assert data["name"] == "test-project"
-    assert "id" in data
+```bash
+cd frontend
+npm run test:unit
+npm run test:e2e
 ```
 
-### Unit Test Pattern
+### Desktop
 
-```python
-import pytest
-from app.core.security import validate_index_path
-from app.core.exceptions import ValidationError
-
-def test_rejects_path_outside_allowed():
-    with pytest.raises(ValidationError):
-        validate_index_path("/etc/passwd", ["/tmp/allowed"])
+```bash
+cd desktop
+npm run test:unit
 ```
 
-### Conventions
+Current repo state note:
 
-- Use the `client` fixture for integration tests — it provides a fully wired app with session token auth
-- Use `db_session` directly for testing service functions in isolation
-- All async tests are auto-detected (no need for `@pytest.mark.asyncio` decorator when using `asyncio_mode = "auto"`, but it doesn't hurt to be explicit)
-- No external services are needed — everything is mocked
-- Test files should be named `test_*.py`
-- Historical audit prose removed from test files is preserved in `docs/test-audit-history.md`
+- There are checked-in specs under `desktop/tests/e2e/`, but the `desktop` workspace does not currently expose a dedicated Playwright script/config the way `frontend/` does.
+
+### VS Code extension
+
+```bash
+cd extension
+npm test
+```
+
+## Backend Tests
+
+### Layout
+
+```text
+backend/tests/
+  conftest.py
+  integration/
+  unit/
+```
+
+### Key fixtures
+
+`backend/tests/conftest.py` currently provides:
+
+| Fixture | Purpose |
+|---|---|
+| `db_engine` | In-memory async SQLite engine with tables created |
+| `db_session` | Async SQLAlchemy session with global session factory override |
+| `mock_vectordb` | AsyncVectorStore mock |
+| `mock_embedder` | Embedder mock |
+| `mock_reranker` | Reranker mock |
+| `mock_llm` | LLMProvider mock |
+| `mock_provider_registry` | Provider registry mock |
+| `mock_job_tracker` | Real `JobTracker` instance |
+| `mock_ws_manager` | WebSocket manager mock |
+| `mock_file_watcher` | File watcher mock |
+| `test_settings` | Test `Settings` override |
+| `client` | Fully wired `httpx.AsyncClient` against `create_app()` with auth header set |
+
+### What backend tests cover
+
+The checked-in backend suite currently covers:
+
+- routers and auth
+- ingestion pipeline and directory walking
+- vector store and async vector wrapper behavior
+- query planning and search service behavior
+- chat orchestration and streaming helpers
+- rate limiting
+- job tracking and sync service behavior
+- embedding model registry/safety/settings store
+- file watcher, maintenance, websocket manager, tokenizer, hardware helpers
+- CLI composition and architecture regressions
+
+## Frontend Tests
+
+### Vitest
+
+`frontend/vitest.config.ts` currently:
+
+- runs in `jsdom`
+- loads `frontend/tests/setup.ts`
+- includes `src/**/__tests__/**/*` and `tests/**/*.{test,spec}.{ts,tsx}`
+- excludes `tests/e2e/**`
+- measures coverage primarily over `src/shared/renderer/**/*`
+
+Current checked-in frontend test directories:
+
+- `frontend/tests/integration/`
+- `frontend/tests/e2e/`
+- `frontend/tests/utils/`
+
+### Playwright
+
+`frontend/playwright.config.ts` currently:
+
+- starts the Next dev server automatically
+- serves the UI at `http://localhost:3000`
+- injects `NEXT_PUBLIC_API_BASE_URL`, defaulting to `http://127.0.0.1:8000`
+- captures traces on first retry and screenshots on failure
+
+Important test-shape detail:
+
+- The frontend E2E tests are meant to exercise the real UI against either the real backend or explicit route mocks depending on the spec.
+
+## Desktop Tests
+
+`desktop/vitest.config.ts` currently:
+
+- uses `jsdom`
+- loads `desktop/tests/setup.ts`
+- includes `src/**/__tests__/**/*`, `tests/unit/**/*`, and `tests/integration/**/*`
+- excludes `tests/e2e/**`
+
+The checked-in desktop suite covers areas such as:
+
+- backend launch command selection
+- diagnostics report generation
+- startup profile normalization/runtime rules
+- onboarding state helpers
+- desktop settings restart semantics
+- IPC settings behavior
+
+There are also checked-in browser-style specs under `desktop/tests/e2e/`, which currently function more as staged coverage than a wired npm test command.
+
+## VS Code Extension Tests
+
+The extension compiles TypeScript and then runs Node's built-in test runner over the compiled output.
+
+Current extension tests include:
+
+- `chatViewMessageHandlers.test.ts`
+- `chatViewTemplate.test.ts`
+- `shared/momodocSse.test.ts`
+- `shared/sidecarLifecycleCore.test.ts`
+
+## Guidance For New Tests
+
+### Backend
+
+- Use the `client` fixture for request-level tests.
+- Use service functions directly with `db_session` for narrower unit tests.
+- Mock external dependencies such as LLM providers, embedder, and vector store unless the test is specifically about that integration boundary.
+
+### Frontend and desktop
+
+- Prefer testing shared renderer behavior through the shared component surface where possible.
+- Keep browser/E2E tests focused on user-visible flows.
+- Keep selectors stable; use roles, labels, and explicit test IDs where needed.
+
+### Extension
+
+- Keep tests host-independent when possible by isolating pure message/template helpers from VS Code APIs.

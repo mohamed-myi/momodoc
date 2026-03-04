@@ -1,104 +1,119 @@
 # momodoc
 
-Personal RAG-based knowledge management for local files, notes, and issues. Organize content into projects, then query it with AI-powered chat that retrieves relevant context and cites sources. Everything except chat runs without an API key.
+Momodoc is a local-first RAG knowledge system for project files, notes, and issues. A single FastAPI backend powers four clients: a desktop app, a static web frontend, a VS Code extension, and a CLI.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  U["User"] --> W["Web UI (Next.js)"]
-  U --> D["Desktop App (Electron + React)"]
+  U["User"] --> D["Desktop App (Electron)"]
+  U --> W["Web UI (Next.js static export)"]
   U --> V["VS Code Extension"]
   U --> C["CLI (Typer)"]
 
-  W --> B["FastAPI Backend"]
-  D --> B
+  D --> B["FastAPI Backend"]
+  W --> B
   V --> B
   C --> B
 
-  B --> S["SQLite (metadata)"]
-  B --> L["LanceDB (vectors + FTS)"]
-  B --> F["Local Filesystem (uploads/source dirs)"]
-  B --> P["LLM Providers (Claude / OpenAI / Gemini / Ollama)"]
+  B --> S["SQLite (metadata, sessions, jobs)"]
+  B --> L["LanceDB (vectors + FTS index)"]
+  B --> F["Local filesystem (uploads, source directories, runtime files)"]
+  B --> P["LLM providers (Claude, OpenAI, Gemini, Ollama)"]
 ```
 
-Four clients connect to a single FastAPI backend. The backend manages all data (SQLite for metadata, LanceDB for vectors) and orchestrates the RAG pipeline.
+## What Exists Today
 
-## Core Features
-
-- Projects with optional `source_directory` for auto-sync
-- File ingestion: upload, index directory, background sync jobs
-- Notes and issues (both indexed for retrieval)
-- Search modes: `hybrid` (default), `vector`, `keyword`
-- Project chat + global chat sessions with streaming (SSE)
-- Switchable LLM providers (Claude, OpenAI, Gemini, Ollama) per request
-- Batch operations, export (Markdown/JSON), and metrics
-- Desktop overlay chat via global hotkey
+- Projects with optional `source_directory` for background sync and file watching
+- File ingestion by upload, one-shot directory indexing, and long-running sync jobs
+- Indexed notes and issues alongside files
+- Global search and project-scoped search
+- Project chat and global chat sessions, including SSE streaming endpoints
+- Provider-backed chat with Claude, OpenAI, Gemini, or Ollama, plus search-only mode in the UI
+- Desktop-only features including tray integration, overlay chat, startup profiles, diagnostics, onboarding, and packaged auto-updates
+- Export endpoints for chat sessions and search results
+- Metrics endpoints and a retrieval-evaluation CLI command
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
+- Python 3.11, 3.12, or 3.13
+- Node.js for the desktop/frontend/extension workspaces
 
-### Install and run
+### Backend only
 
 ```bash
 make momo-install
-cp .env.example .env   # optional; needed for cloud LLM providers
+cp .env.example .env
 make serve
 ```
 
-The backend listens on `http://127.0.0.1:8000` by default.
+The backend default URL is `http://127.0.0.1:8000`.
 
-> **Important:** Directory indexing and `source_directory` sync require `ALLOWED_INDEX_PATHS` in your `.env`. When empty, all directory indexing/sync operations are rejected.
+### Development workflows
+
+```bash
+# backend with reload
+make dev
+
+# desktop app (expects the frontend deps to be installed in desktop/)
+make dev-desktop
+
+# web frontend
+cd frontend && npm install && npm run dev
+
+# VS Code extension
+cd extension && npm install && npm run compile
+```
+
+### Important runtime notes
+
+- The server writes runtime files into the Momodoc data directory, including `momodoc.pid`, `momodoc.port`, and `session.token`.
+- Directory indexing and `source_directory` sync are blocked unless `ALLOWED_INDEX_PATHS` is configured.
+- The backend serves `backend/static/` if present. The `frontend` workspace builds a static export (`frontend/out`) that can be copied there.
+- Desktop packaged builds prefer the bundled backend runtime; development and the VS Code extension use `momodoc serve`.
 
 ## Documentation
 
-### For Users
-
-Setup, usage, and troubleshooting:
+### User docs
 
 | Document | Content |
 |----------|---------|
-| [Desktop Install](docs/user/desktop-install.md) | Download and install the desktop app |
-| [Command-Line Install](docs/user/command-line-install.md) | One-command desktop installers (curl/PowerShell) |
-| [Tutorial](docs/user/tutorial.md) | Comprehensive guide across all surfaces |
-| [Desktop Troubleshooting](docs/user/desktop-troubleshooting.md) | Diagnostics-first troubleshooting |
-| [VS Code Extension](docs/user/vscode-extension.md) | Extension install, commands, sidebar chat |
-| [Log Files](docs/user/logging.md) | Log locations and debugging checklist |
+| [Desktop Install](docs/user/desktop-install.md) | Recommended install path for the packaged desktop app |
+| [Command-Line Install](docs/user/command-line-install.md) | Release installer scripts for desktop builds |
+| [Tutorial](docs/user/tutorial.md) | End-to-end product guide across desktop, web, CLI, and extension |
+| [Desktop Troubleshooting](docs/user/desktop-troubleshooting.md) | Diagnostics-first support guide for desktop startup/runtime issues |
+| [VS Code Extension](docs/user/vscode-extension.md) | Extension commands, sidebar chat, and backend connectivity |
+| [Log Files](docs/user/logging.md) | Runtime log locations and debugging checklist |
 
-### For Developers
-
-Architecture, APIs, and development workflow:
+### Developer docs
 
 | Document | Content |
 |----------|---------|
-| [Architecture](docs/dev/architecture.md) | Full system design: backend, desktop, extension, shared UI |
-| [API Patterns](docs/dev/api-patterns.md) | Conventions, auth, schemas, endpoints, streaming |
-| [Data Model](docs/dev/data-model.md) | SQLite tables, LanceDB schema, migrations |
-| [Frontend Guide](docs/dev/frontend-guide.md) | Next.js, React, Tailwind, shared renderer |
-| [Ingestion Pipeline](docs/dev/ingestion-pipeline.md) | Parsers, chunkers, embedding, sync |
-| [Testing](docs/dev/testing.md) | pytest, fixtures, coverage, conventions |
-| [DevOps](docs/dev/devops.md) | Lifecycle, Makefile, env config, CLI |
-| [Contributing](docs/dev/contributing.md) | Dev setup, coding standards, workflow |
-| [Logging](docs/dev/logging.md) | Logging architecture and middleware |
+| [Architecture](docs/dev/architecture.md) | Current runtime and data-flow architecture |
+| [API Patterns](docs/dev/api-patterns.md) | Backend conventions, auth, routers, and endpoint shape |
+| [Data Model](docs/dev/data-model.md) | SQLite tables, LanceDB schema, and migration behavior |
+| [Frontend Guide](docs/dev/frontend-guide.md) | Shared renderer architecture, frontend bootstrap, and UI conventions |
+| [Ingestion Pipeline](docs/dev/ingestion-pipeline.md) | Parsing, chunking, embedding, sync, and path safety |
+| [Testing](docs/dev/testing.md) | Backend, frontend, desktop, and extension test layout |
+| [DevOps](docs/dev/devops.md) | Runtime files, env vars, CLI lifecycle, and packaging-adjacent operations |
+| [Contributing](docs/dev/contributing.md) | Local setup, workflow, and repo conventions |
+| [Logging](docs/dev/logging.md) | Backend and desktop logging behavior |
 
-Desktop-specific dev docs are in [docs/dev/desktop/](docs/dev/desktop/).
+Desktop-maintainer docs live in [docs/dev/desktop/](docs/dev/desktop/).
 
-### Portfolio
-
-Technical deep-dives on design decisions, tradeoffs, and implementation:
+### Portfolio docs
 
 | Document | Content |
 |----------|---------|
-| [System Design](docs/portfolio/system-design.md) | Multi-client architecture, tech stack rationale |
-| [RAG Pipeline](docs/portfolio/rag-pipeline.md) | Parsing, chunking, embedding, hybrid search |
-| [Data Architecture](docs/portfolio/data-architecture.md) | Dual-store design, async concurrency patterns |
-| [LLM Abstraction](docs/portfolio/llm-abstraction.md) | Provider factory, streaming, rate limiting |
-| [Desktop Engineering](docs/portfolio/desktop-engineering.md) | Sidecar lifecycle, IPC, overlay, shared UI |
-| [Architecture Decisions](docs/portfolio/architecture-decisions.md) | 8 ADRs with alternatives and rationale |
+| [Portfolio Overview](docs/portfolio/README.md) | Entry point for architecture deep-dives |
+| [System Design](docs/portfolio/system-design.md) | System-level tradeoffs and runtime boundaries |
+| [RAG Pipeline](docs/portfolio/rag-pipeline.md) | Retrieval pipeline and query-time planning |
+| [Data Architecture](docs/portfolio/data-architecture.md) | SQLite/LanceDB split and vector-store concurrency model |
+| [LLM Abstraction](docs/portfolio/llm-abstraction.md) | Provider factory, model metadata, and streaming interface |
+| [Desktop Engineering](docs/portfolio/desktop-engineering.md) | Sidecar lifecycle, IPC, overlay, and packaged runtime decisions |
+| [Architecture Decisions](docs/portfolio/architecture-decisions.md) | Architecture decision records grounded in the current codebase |
 
 ## Repository Layout
 
@@ -106,33 +121,34 @@ Technical deep-dives on design decisions, tradeoffs, and implementation:
 momodoc/
   backend/
     app/
-      bootstrap/        # startup, routes, exceptions, watcher
-      core/             # database, vectordb, async_vectordb, exceptions, security
-      middleware/        # auth, logging
-      models/           # SQLAlchemy ORM (10 tables)
-      schemas/          # Pydantic request/response models
-      routers/          # 12 API routers
-      services/         # business logic + services/ingestion/
-      llm/              # provider abstraction (claude, openai, gemini, ollama, factory)
-    cli/                # Typer CLI
-    migrations/
-    tests/
+      bootstrap/          # lifespan, route registration, watcher startup
+      core/               # DB, vector store, logging, auth helpers, rate limiting
+      llm/                # provider implementations and registry/factory
+      middleware/         # request logging and session-token auth
+      models/             # SQLAlchemy ORM models
+      routers/            # REST + websocket entry points
+      schemas/            # Pydantic request/response models
+      services/           # business logic, retrieval, sync, ingestion, metrics
+    cli/                  # Typer CLI
+    migrations/           # Alembic migrations
+    tests/                # pytest unit/integration coverage
   desktop/
-    src/main/           # Electron main (sidecar, IPC, window factory, updater)
-    src/renderer/       # React components (thin wrappers over shared)
-    src/shared/         # app-config, desktop-settings
+    src/main/             # Electron main process, sidecar, IPC, updater, diagnostics
+    src/renderer/         # desktop renderer bootstrap and wrappers
+    src/shared/           # shared desktop config and settings metadata
+    tests/                # Vitest unit/integration and Playwright E2E tests
   frontend/
-    src/
-      shared/renderer/  # Shared components, lib, CSS (consumed by frontend + desktop)
-      components/       # Thin wrappers re-exporting from shared/renderer/
-      lib/              # Frontend-specific api bootstrap
+    src/app/              # Next.js app entry points
+    src/components/       # web app shell and wrapper components
+    src/shared/renderer/  # shared UI, hooks, API client core, styling
+    tests/                # Vitest integration tests and Playwright E2E tests
   extension/
-    src/                # VS Code extension (sidecar, chat, API, shared helpers)
-    media/              # chat.html, chat.js, chat.css
+    src/                  # VS Code extension host, webview provider, API client, sidecar
+    media/                # sidebar webview assets
   docs/
-    user/               # End-user guides
-    dev/                # Developer reference
-    portfolio/          # Technical portfolio
+    dev/
+    portfolio/
+    user/
 ```
 
 ## License

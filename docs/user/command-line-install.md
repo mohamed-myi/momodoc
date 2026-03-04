@@ -1,81 +1,128 @@
-# Command-Line Install (Desktop App)
+# Command-Line Install
 
-Last verified version: `0.1.0` (script syntax/dry-run verified locally on macOS, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-This installs the **desktop app** from GitHub Releases so users can launch Momodoc like a normal desktop application (no terminal needed after install).
+This document covers the installer scripts in:
 
-## macOS / Linux
+- `scripts/install.sh`
+- `scripts/install.ps1`
+
+These scripts install packaged desktop builds. They do not build the app from source.
+
+## Platform Support In The Current Scripts
+
+Current scripted support is:
+
+- macOS arm64 via zip artifact
+- Linux x64 and arm64 via AppImage
+- Windows x64 and arm64 via NSIS `.exe`
+
+Important current limitation:
+
+- `scripts/install.sh` explicitly rejects macOS x64
+
+## macOS And Linux
+
+Install the latest supported release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash
 ```
 
-Options:
+Useful options:
 
 ```bash
-# install a specific tag
+# pin a specific release tag
 curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash -s -- --version v0.1.0
 
-# dry-run (show what would happen)
+# dry run
 curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash -s -- --dry-run
 
-# create optional CLI shim (advanced users)
+# install somewhere else
+curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash -s -- --install-dir "$HOME/Applications"
+
+# skip desktop shortcut creation
+curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash -s -- --no-desktop-shortcut
+
+# create an optional CLI shim
 curl -fsSL https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.sh | bash -s -- --cli-shim
 ```
 
-## Windows (PowerShell)
+Current script behavior:
+
+- resolves the latest release unless `--version` is provided
+- downloads `SHA256SUMS.txt`
+- verifies the artifact checksum
+- installs to a per-user location by default
+- optionally creates a desktop shortcut and CLI shim
+
+## Windows PowerShell
+
+The PowerShell installer is a parameterized script, not a helper function. The most reliable path is to download it and run it as a file.
+
+Install the latest release:
 
 ```powershell
-irm https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.ps1 | iex
+$tmp = Join-Path $env:TEMP "momodoc-install.ps1"
+irm https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.ps1 -OutFile $tmp
+powershell -ExecutionPolicy Bypass -File $tmp
 ```
 
-Options:
+Useful options:
 
 ```powershell
-# install a specific tag
-irm https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.ps1 | iex; Install-MomodocDesktop -Version v0.1.0
+# pin a version
+powershell -ExecutionPolicy Bypass -File $tmp -Version v0.1.0
 
-# dry-run
-irm https://raw.githubusercontent.com/mohamedibrahim/momodoc/main/scripts/install.ps1 | iex; Install-MomodocDesktop -DryRun
+# dry run
+powershell -ExecutionPolicy Bypass -File $tmp -DryRun
+
+# install somewhere else
+powershell -ExecutionPolicy Bypass -File $tmp -InstallDir "$env:LOCALAPPDATA\Programs\momodoc"
+
+# skip desktop shortcut
+powershell -ExecutionPolicy Bypass -File $tmp -NoDesktopShortcut
+
+# create CLI shim
+powershell -ExecutionPolicy Bypass -File $tmp -CreateCliShim
+
+# silent NSIS run
+powershell -ExecutionPolicy Bypass -File $tmp -Silent
 ```
 
-## What the Installer Does
+Current script behavior:
 
-- Detects OS / architecture
-- Downloads the latest (or pinned) release artifact from GitHub Releases
-- Verifies artifact checksum (`SHA256SUMS.txt`)
-- Installs the desktop app to a standard user location
-- Creates a desktop shortcut/alias by default (platform support varies)
-- Optionally creates a CLI shim for advanced users
+- resolves the latest release unless `-Version` is provided
+- downloads `SHA256SUMS.txt`
+- verifies the installer checksum
+- runs the NSIS installer
+- optionally creates a desktop shortcut and `momodoc-desktop.cmd` shim
 
-## Notes on Verification
+## Default Install Locations
 
-- `scripts/install.sh` help/syntax/dry-run were verified locally.
-- Windows PowerShell execution and real GitHub download/install still require manual verification on target OS.
-- Linux install behavior depends on published Linux artifacts (`.AppImage` / `.deb`).
+Current script defaults are:
 
-## After Install
+- macOS: `~/Applications/momodoc.app`
+- Linux: `~/.local/opt/momodoc/momodoc.AppImage`
+- Windows: `%LocalAppData%\\Programs\\momodoc`
 
-Launch Momodoc from:
-- macOS: `Applications`
-- Windows: `Start Menu` / desktop shortcut
-- Linux: app launcher / desktop shortcut (artifact-dependent)
+## Optional CLI Shim Names
 
-Then complete the first-run setup wizard.
+If enabled, the scripts create:
+
+- macOS and Linux: `~/.local/bin/momodoc-desktop`
+- Windows: `~/.local/bin/momodoc-desktop.cmd`
+
+These launch the desktop app. They are not the backend `momodoc` CLI.
 
 ## Uninstall
 
-Exact paths vary by OS and selected options.
+Remove the installed application path and any shortcut or shim you created.
 
-- macOS:
-  - remove `~/Applications/momodoc.app`
-  - remove Desktop alias/shortcut if created
-- Windows:
-  - remove `%LocalAppData%\Programs\momodoc` (or uninstall from Apps/Installed Apps if the installer registers there)
-  - remove Desktop shortcut if present
-- Linux:
-  - remove `~/.local/opt/momodoc/` (AppImage install path used by script)
-  - remove generated desktop shortcut (`~/.local/share/applications/momodoc.desktop` or Desktop shortcut, if created)
+Typical default paths:
 
-Optional:
-- remove Momodoc app data directory only if you want to delete local projects/indexes/logs too (see [Desktop Troubleshooting](desktop-troubleshooting.md) for locations).
+- macOS: `~/Applications/momodoc.app`
+- Linux: `~/.local/opt/momodoc/`
+- Windows: `%LocalAppData%\\Programs\\momodoc`
+
+You can also remove the Momodoc data directory if you want to wipe local state. See [Desktop Troubleshooting](desktop-troubleshooting.md) for those locations.

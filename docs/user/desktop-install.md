@@ -1,81 +1,92 @@
-# Desktop Install (Recommended)
+# Desktop Install
 
-Last verified version: `0.1.0` (local packaged build on macOS, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-Momodoc is designed to run as a desktop app without needing the App Store or paid hosting.
+The desktop app is the most complete end-user surface in this repo. It adds onboarding, diagnostics, overlay chat, metrics, and packaged-build update support on top of the shared Momodoc UI.
 
-## Recommended Path
+## Recommended Paths
 
-1. Install the desktop app from GitHub Releases (GUI download) or the command-line installer.
-2. Launch `momodoc` from Applications / Start Menu / desktop shortcut.
-3. Complete the first-run setup wizard.
+Choose one of these:
 
-## Download From GitHub Releases
+1. Download a packaged desktop build from GitHub Releases.
+2. Use the installer scripts documented in [Command-Line Install](command-line-install.md).
 
-Release artifacts are published here:
-- [GitHub Releases](https://github.com/mohamedibrahim/momodoc/releases)
+## What The App Does On First Launch
 
-Typical artifacts:
-- macOS: `momodoc-<version>-mac-universal.dmg` and `.zip`
-- Windows: `momodoc-<version>-win-x64.exe` / `momodoc-<version>-win-arm64.exe`
-- Linux (when published): `.AppImage` and/or `.deb`
+Current desktop builds open a setup wizard when onboarding is `not_started` or `in_progress`.
 
-## First Launch (What to Expect)
+The wizard can help you:
 
-On first launch, Momodoc opens a setup wizard that guides you through:
-- allowed folders (for indexing/sync)
-- AI mode (search-only, local Ollama, or cloud providers)
-- startup behavior (desktop/overlay/web/VS Code companion presets)
-- optional first project creation
+- choose allowed folders for indexing
+- pick an AI mode
+- choose a startup profile
+- optionally create your first project
 
-You can skip and finish later. The app stays usable.
+You can skip it and continue using the app immediately.
 
-## Desktop Launch Profiles (Open Together)
+## Release Assets And Platform Notes
 
-Open `Settings -> Startup & Launch` to control what opens together when Momodoc starts:
-- Desktop window
-- Overlay
-- Web UI in browser
-- VS Code (best effort)
-- Tray behavior / auto-launch
+The repo contains two relevant sources of truth:
 
-## Unsigned Build Warnings (Expected)
+- desktop packaging config can build macOS dmg/zip and Windows NSIS installers
+- the installer scripts only target a narrower set of published artifacts
 
-Momodoc can be distributed without paid code signing/notarization, but OS trust warnings are expected.
+Current script-backed expectations are:
 
-- macOS: Gatekeeper may warn that the app is from an unidentified developer.
-- Windows: SmartScreen may warn before running the installer.
+- macOS command-line install: arm64 zip artifact
+- Linux command-line install: x64 or arm64 AppImage
+- Windows command-line install: x64 or arm64 NSIS `.exe`
 
-If you trust the release source (`mohamedibrahim/momodoc` GitHub Releases), continue using your OS's "Open anyway" / "More info -> Run anyway" flow.
+Published release contents can vary by release, so the GitHub Releases page is the authoritative place to see what was actually uploaded for a given version.
 
-## Updating
+## After Installation
 
-- Packaged desktop builds check for updates via GitHub Releases.
-- The app may show a "What's New" dialog after version changes.
-- You can also manually check updates in `Settings -> About`.
+The desktop app currently provides:
+
+- project dashboard
+- project chat, files, notes, and issues
+- global chat on the dashboard
+- settings
+- diagnostics
+- metrics
+- optional overlay chat
+
+## Updates
+
+Packaged desktop builds can check for updates. Current updater behavior is:
+
+- packaged builds only
+- stable channel only
+- update discovery can be automatic or manual
+- download is manual after an update is found
+- install happens on quit or via explicit install action
+
+In dev or unpackaged runs, updater status is `unsupported`.
+
+## Trust Warnings
+
+Unsigned or unnotarized builds may trigger OS trust prompts.
+
+Typical examples:
+
+- macOS Gatekeeper warnings
+- Windows SmartScreen warnings
+
+Those warnings are separate from Momodoc runtime behavior.
 
 ## Uninstall
 
-1. Quit Momodoc.
-2. Remove the installed app bundle/installer location for your platform.
-3. Optionally remove Momodoc data files if you want a full reset (projects, indexes, logs, local settings).
+Remove:
 
-Data directory locations are listed in:
-- [Desktop Troubleshooting](desktop-troubleshooting.md)
+- the installed app bundle or installer-managed app directory
+- optional desktop shortcut or CLI shim if you created one
 
-If you installed via the command-line installer, see platform-specific paths in:
-- [Command-Line Install](command-line-install.md)
+Optionally remove the Momodoc data directory if you want a full reset of:
 
-## Troubleshooting (Start Here)
+- local settings
+- logs
+- indexes
+- uploaded files
+- local database
 
-Use in-app diagnostics first:
-- `Settings -> Diagnostics`
-- `Open Logs Folder`
-- `Open Data Folder`
-- `Copy Diagnostic Report`
-
-Then see [Desktop Troubleshooting](desktop-troubleshooting.md).
-
-## Screenshot Notes
-
-Screenshots are pending manual capture from a packaged app verification run and will be added after final release verification.
+See [Desktop Troubleshooting](desktop-troubleshooting.md) for data-directory locations.

@@ -1,80 +1,94 @@
-# Momodoc Log Files and Debugging
+# Momodoc Logs And Debugging
 
-This guide covers where to find log files and how to use them for troubleshooting.
+Last verified against source on 2026-03-04.
 
-## Log Location
+## Default Log Location
 
-Logs are written under the Momodoc data directory (`MOMODOC_DATA_DIR` override supported).
+Momodoc logs live under the Momodoc data directory unless you override the data directory.
 
 Default locations:
+
 - macOS: `~/Library/Application Support/momodoc/`
 - Linux: `~/.local/share/momodoc/`
-- Windows: `%APPDATA%\momodoc\`
+- Windows: `%LOCALAPPDATA%\\momodoc\\`
 
-## Log Files
+## Backend Log Files
 
-### `momodoc.log`
+Current backend log files are:
 
-The primary backend log. Contains:
-- startup/shutdown lifecycle logs
-- service and request logs
-- uncaught exception traces
+- `momodoc.log`
+- `momodoc-startup.log`
 
-Rotation:
-- `maxBytes = 10MB`
-- `backupCount = 5`
+`momodoc.log` is the main rotating backend log.
 
-### `momodoc-startup.log`
+`momodoc-startup.log` captures startup-related information and is especially useful when initialization fails early.
 
-A dedicated startup log. Especially useful when the backend fails to start.
+## Desktop Log Files
 
-Rotation:
-- `maxBytes = 5MB`
-- `backupCount = 3`
+When using the desktop app, you may also see:
 
-### `sidecar.log`
+- `sidecar.log`
+- `updater.log`
 
-Only produced when running the desktop app. Contains:
-- sidecar start/stop/restart events
-- backend stdout/stderr capture lines
-- health polling and timeout messages
-- stale PID/port cleanup events
+`sidecar.log` records Electron-side backend lifecycle activity such as:
 
-## Common Startup Sequence (Desktop)
+- reuse of an existing backend
+- stale PID cleanup
+- spawn attempts
+- stdout and stderr capture
+- readiness timeouts
 
-1. `sidecar.log`: sidecar decides whether backend is already running
-2. `sidecar.log`: sidecar starts/reuses backend process
-3. `momodoc.log`: backend critical startup (dirs, DB, migrations, token)
-4. `momodoc.log`: deferred startup tasks begin
-5. `sidecar.log`: backend health check succeeds
+`updater.log` exists for packaged desktop builds and records update checks, download state, and updater failures.
 
-## Debugging Checklist
+## Extension Logs
 
-### Backend does not start
+The VS Code extension does not currently write its own dedicated log file. Its operational logs go to the VS Code output channel:
 
-1. Check `momodoc.log` for migration/init/port errors
-2. Check `momodoc-startup.log` for startup-path details
-3. Check if stale runtime files exist (`momodoc.pid`, `momodoc.port`)
+- `View -> Output -> Momodoc`
 
-### Desktop cannot connect
+## Other Useful Runtime Files
 
-1. Check `sidecar.log` for `Failed to start` or timeout lines
-2. Verify `momodoc` CLI is available for sidecar spawn
-3. Confirm backend health endpoint responds: `GET /api/v1/health`
+The same data directory also contains:
 
-### Token/auth failures (`401`)
-
-1. Confirm `session.token` exists in data dir
-2. Confirm clients send `X-Momodoc-Token`
-3. Re-read token after backend restart (token rotates each run)
-
-## Related Runtime Files
-
-Also in data dir:
 - `session.token`
 - `momodoc.pid`
 - `momodoc.port`
 - `db/`
 - `vectors/`
 - `uploads/`
-- `config.json` (desktop `electron-store`)
+- `config.json` for desktop Electron settings
+
+## Practical Debugging Order
+
+1. Check `momodoc-startup.log` for startup or migration failures.
+2. Check `momodoc.log` for backend request and service errors.
+3. If using desktop, check `sidecar.log` for spawn and readiness problems.
+4. If using a packaged desktop build and updates are involved, check `updater.log`.
+5. If using the VS Code extension, inspect the `Momodoc` output channel.
+
+## Common Cases
+
+### Backend does not start
+
+Inspect:
+
+- `momodoc-startup.log`
+- `momodoc.log`
+- `momodoc.pid`
+- `momodoc.port`
+
+### Desktop cannot connect
+
+Inspect:
+
+- `sidecar.log`
+- backend health at `http://127.0.0.1:8000/api/v1/health`
+- `session.token`
+
+### Token or auth issues
+
+Inspect:
+
+- whether `session.token` exists
+- whether the client is sending `X-Momodoc-Token`
+- whether the backend was restarted and rotated the token

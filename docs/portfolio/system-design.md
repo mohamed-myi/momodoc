@@ -1,73 +1,169 @@
 # System Design
 
-## Problem Statement
+Last verified against source on 2026-03-04.
 
-Personal knowledge management tools either require cloud infrastructure (cost, privacy concerns) or sacrifice retrieval quality (basic keyword search). Momodoc provides local-first RAG with full embedding-based retrieval while remaining a single-process, zero-infrastructure deployment.
+## Problem Shape
 
-## Multi-Client Architecture
+Momodoc is designed for single-user, single-machine knowledge work:
 
-Momodoc serves four distinct client surfaces from one backend:
+- local files need to be indexed without cloud infrastructure
+- retrieval should combine semantic search and full-text search
+- the same corpus should be reachable from desktop, browser, editor, and CLI workflows
 
+## Runtime Topology
+
+The central runtime is the FastAPI backend. Every other surface either talks to it directly or manages it.
+
+```text
+Electron desktop renderer ----+
+Web frontend -----------------+--> FastAPI backend --> SQLite
+VS Code extension ----------- +                   --> LanceDB
+CLI ------------------------- +                   --> local/remote LLM providers
 ```
-Desktop App (Electron)  ---+
-Web Frontend (Next.js)  ---+--> FastAPI Backend --> SQLite + LanceDB
-VS Code Extension       ---+                   --> LLM Providers
-CLI (Typer)             ---+
-```
 
-The backend is the single source of truth. Clients are stateless HTTP consumers. This means:
-- No client-to-client coordination is needed.
-- Any combination of clients can run simultaneously.
-- The backend can run headless (CLI-only) or with all four clients.
+Two important implementation details:
 
-### Why not merge clients into one?
+- the desktop renderer reaches the backend through the Electron main process, which manages the sidecar and exposes `window.momodoc` IPC bridges
+- the web frontend is a static export; it does not ship its own Node server
 
-Each client serves a different workflow. The desktop app is the primary UI with metrics, settings, and an always-on-top overlay for quick queries. The web frontend provides a lighter browser-based experience. The VS Code extension integrates directly into the editor (ingest files, chat in sidebar). The CLI is for automation and scripting. Sharing a single backend means all four surfaces always see the same data without sync complexity.
+## Client Surfaces
 
-## Tech Stack Rationale
+### Web frontend
 
-### Python + FastAPI
+The backend serves the frontend build from static files through `SPAStaticFiles`.
 
-Python was chosen for its dominant position in the ML/NLP ecosystem. sentence-transformers, PyMuPDF, python-docx, and tree-sitter all have mature Python bindings. FastAPI provides native async support, automatic OpenAPI docs, and Pydantic validation with minimal overhead. The async model matters because embedding and LLM calls are I/O-bound operations that benefit from concurrent request handling.
+Current behavior:
 
-### SQLite (WAL mode)
+- explicit asset paths still 404 normally
+- non-asset paths fall back to `index.html`
+- the frontend uses one exported Next page and internal state routing instead of App Router URL segments
 
-A local-first tool should not require users to install and manage a database server. SQLite provides ACID transactions, foreign keys, and good enough throughput for a single-user workload. WAL (Write-Ahead Logging) mode enables concurrent reads while a write is in progress, which is important during sync jobs that write file metadata while the UI reads project listings.
+### Desktop app
 
-### LanceDB (embedded)
+The desktop app is an Electron shell with:
 
-LanceDB was selected over cloud vector databases (Pinecone, Weaviate) to keep the system entirely local and free of API costs. Unlike FAISS, LanceDB provides built-in Tantivy full-text search (enabling hybrid retrieval without a separate search index), persistent storage (no need to rebuild on restart), and SQL-like filtering (allowing project-scoped searches without loading all vectors into memory). The tradeoff is that LanceDB is less battle-tested at scale, but for personal knowledge management (thousands to tens of thousands of documents), this is acceptable.
+- a main React renderer
+- an optional overlay window
+- packaged-build updater support
+- sidecar management for the Python backend
+- local config persisted in Electron store
 
-### Electron for Desktop
+Packaged builds prefer a bundled backend runtime. Development builds still use `momodoc serve`.
 
-The desktop app needs to manage a sidecar backend process, register global shortcuts, create overlay windows, and integrate with OS-level features (tray, auto-launch, file dialogs). Electron provides all of these through a mature API. The renderer shares React components with the web frontend, avoiding UI duplication. The overhead of Electron is justified by the shared component model and the complexity of the sidecar lifecycle.
+### VS Code extension
 
-### Next.js Static Export
+The extension contributes:
 
-The web frontend uses Next.js with `output: "export"` to produce static HTML/JS/CSS that the FastAPI backend serves directly. There is no separate frontend server. This eliminates a deployment concern (one process instead of two) and keeps the frontend as a pure static asset. The tradeoff is losing SSR, but for a local tool that authenticates via session token, SSR provides no benefit.
+- an Activity Bar container with a chat webview
+- commands to start and stop the backend
+- a command and Explorer action to ingest a file into a project
+- a status bar item reflecting backend state
 
-## Deployment Model
+The extension sidecar always launches `momodoc serve` from the environment; it does not bundle a backend runtime.
 
-Momodoc runs as a single native Python process. No Docker, no separate database service, no reverse proxy. Data lives in the OS user data directory (`~/Library/Application Support/momodoc/` on macOS). The desktop app bundles a Python runtime so end users do not need Python installed.
+### CLI
 
-This single-process model simplifies installation to one step and eliminates class-of-bugs related to service coordination. The constraint is single-machine, single-user deployment, which is the intended use case.
+The CLI is the headless entry point for server lifecycle and data operations.
+
+Top-level commands:
+
+- `serve`
+- `stop`
+- `status`
+- `chat`
+- `search`
+- `rag-eval`
+
+Command groups:
+
+- `project`
+- `ingest`
+- `note`
+- `issue`
+
+## Deployment Modes
+
+Momodoc does not have a single deployment shape. The current codebase supports several.
+
+### Backend-only
+
+Run `momodoc serve` or `make serve`, then use the browser, CLI, or VS Code extension against the local API.
+
+### Desktop-managed
+
+Launch the Electron app and let it:
+
+- detect an existing backend
+- or start its own sidecar
+- then connect the renderer to that local backend
+
+### Mixed local clients
+
+It is valid for the desktop app, browser, CLI, and VS Code extension to all point at the same local backend at once. The desktop sidecar and VS Code sidecar both attempt to reuse a healthy existing backend before spawning their own.
+
+## Persistence Model
+
+Persistence is split by access pattern:
+
+- SQLite stores relational entities, workflow state, chat history, sync jobs, and configuration markers
+- LanceDB stores chunk text, vectors, and retrieval-facing metadata
+
+This is not an abstract multi-database architecture exercise. It exists because the system needs:
+
+- ACID-style metadata updates
+- efficient vector retrieval and hybrid search over chunks
 
 ## Authentication Model
 
-The backend generates a session token (`secrets.token_urlsafe(32)`) at startup and writes it to a file with mode `0600`. All API requests must include this token via the `X-Momodoc-Token` header. The token endpoint (`GET /api/v1/token`) returns the token but only to localhost requests.
+At startup, the backend generates a session token with `secrets.token_urlsafe(32)` and writes it to a `0600` token file inside the data directory.
 
-This model works because:
-- The backend only listens on `127.0.0.1` (not externally reachable).
-- The token rotates on every restart (no long-lived credentials).
-- File permissions restrict token access to the current user.
+Current request model:
 
-The tradeoff is that any local process can read the token file, but for a single-user local tool, this matches the threat model.
+- authenticated API requests send `X-Momodoc-Token`
+- `GET /api/v1/token` is only available to localhost callers
+- backend host defaults to `127.0.0.1`
 
-## State-Based Routing
+This is designed for local trust boundaries, not internet exposure.
 
-The web frontend and desktop renderer use state-based routing (`useState<View>`) rather than URL-based routing. Views are `"dashboard"` or `"project"`. This was chosen because:
-- The static export cannot handle dynamic URL segments without server-side rewrites.
-- A single-page app with two primary views does not benefit from URL routing.
-- State management is simpler when view transitions are function calls rather than URL pushes.
+## Frontend Navigation Model
 
-The tradeoff is no deep-linking or browser back/forward navigation, which is acceptable for a local tool where the entry point is always the dashboard.
+The current clients do not rely on server-side route resolution for their core app state.
+
+Current view models:
+
+- web: `dashboard | project | settings`
+- desktop: `dashboard | project | settings | metrics`
+
+The desktop renderer also persists and restores the last view when the startup profile allows it.
+
+## Startup Model
+
+The backend has a two-phase startup sequence.
+
+### Critical path
+
+Before serving requests it:
+
+- configures logging
+- loads persisted settings
+- initializes the database and runs migrations
+- initializes the WebSocket manager (early, for startup broadcasts)
+- checks embedding-model compatibility
+- initializes the LanceDB vector store
+- creates the provider registry and default LLM provider
+- writes the session token
+- recovers job state
+- initializes the file watcher
+
+### Deferred startup
+
+After the server is already accepting requests it:
+
+- loads the embedder
+- optionally loads the reranker
+- builds the LanceDB FTS index
+- cleans orphaned vectors
+- launches auto-sync for projects with `source_directory`
+- starts file watchers
+
+That makes the system responsive sooner, but some capabilities become fully available only after deferred startup finishes.

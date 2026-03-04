@@ -1,226 +1,370 @@
 # DevOps
 
-## Architecture
+This document covers the current operational model for Momodoc across the backend, desktop sidecar flow, CLI, and supporting workspace scripts.
 
-Momodoc runs as a **single native Python process**. No Docker, no separate vector database. The FastAPI backend serves the API, static frontend, and manages embedded LanceDB and SQLite databases.
+## Runtime Model
 
-All data is stored in the **OS user data directory** (via `platformdirs`):
+Momodoc's core service is a single local FastAPI backend process backed by embedded SQLite and LanceDB. Other product surfaces talk to that backend:
 
-| OS | Path |
-|----|------|
+- the CLI connects over HTTP
+- the web frontend calls the backend directly
+- the desktop app starts or reuses the backend as a sidecar
+- the VS Code extension can start or stop the backend on demand
+
+There is no Docker configuration and no separate hosted vector database in this repo.
+
+## Data Directory
+
+Backend runtime state is stored under `platformdirs.user_data_dir("momodoc")` unless `MOMODOC_DATA_DIR` overrides it.
+
+Typical default locations:
+
+| OS | Default path |
+|---|---|
 | macOS | `~/Library/Application Support/momodoc/` |
 | Linux | `~/.local/share/momodoc/` |
 | Windows | `C:\Users\<user>\AppData\Local\momodoc\` |
 
-Override with `MOMODOC_DATA_DIR` environment variable.
+Current backend-owned contents:
 
-### Data Directory Layout
-
-```
+```text
 <data_dir>/
-├── db/momodoc.db        # SQLite database
-├── vectors/             # LanceDB vector tables
-├── uploads/             # Managed file uploads
-├── session.token        # Transient auth token (auto-generated on startup)
-├── momodoc.pid          # PID of running server
-└── momodoc.port         # Port of running server
+  db/momodoc.db
+  vectors/
+  uploads/
+  settings.json
+  session.token
+  momodoc.pid
+  momodoc.port
+  momodoc.log
+  momodoc-startup.log
 ```
+
+Desktop-specific files that are also written nearby in normal desktop usage:
+
+- `sidecar.log` in the shared Momodoc data dir
+- `updater.log` in Electron's `app.getPath("userData")`
+
+## Configuration Precedence
+
+The backend loads settings from:
+
+1. persisted `settings.json`
+2. environment variables and `.env`
+3. coded defaults in `backend/app/config.py`
+
+Important scope detail:
+
+- `settings.json` currently persists only LLM-related settings because `SettingsStore` filters writes to that key set.
+- Infrastructure settings such as `PORT`, `MOMODOC_DATA_DIR`, chunk sizes, and sync concurrency still come from env/defaults.
 
 ## Server Lifecycle
 
-### CLI Commands
+### CLI commands
 
-| Command | Description |
-|---------|-------------|
-| `momodoc serve` | Start the server (foreground, binds to 127.0.0.1:8000) |
-| `momodoc serve --port 9000` | Start on a custom port |
-| `momodoc serve --reload` | Start with auto-reload for development |
-| `momodoc status` | Check if the server is running (PID, port, URL) |
-| `momodoc stop` | Stop the running server (SIGTERM, then SIGKILL after 5s) |
+| Command | Current behavior |
+|---|---|
+| `momodoc serve` | Starts the backend in the foreground |
+| `momodoc serve --port 9000` | Overrides the port |
+| `momodoc serve --reload` | Runs uvicorn reload mode |
+| `momodoc status` | Prints PID, port, URL, and data dir if running |
+| `momodoc stop` | Sends `SIGTERM`, waits up to 5 seconds (polling every 100ms), then escalates to `SIGKILL`; also cleans up `session.token`, PID, and port files |
 
-### Process Management
+### Process files
 
-- On `serve`: writes PID to `momodoc.pid`, port to `momodoc.port` in the data directory
-- On `stop`: reads PID from file, sends SIGTERM, waits up to 5 seconds, then SIGKILL if needed
-- Stale PID files (process not running) are automatically cleaned up
-- Port conflicts are detected before starting
+`cli/commands/server.py` currently manages these files:
 
-### Session Token
+- `momodoc.pid`: locked with an exclusive non-blocking file lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows) for single-instance startup protection; the lock is held for the entire process lifetime and released automatically on exit or crash
+- `momodoc.port`: written on startup
+- `session.token`: written by backend lifespan, not by the CLI wrapper
 
-- Generated on startup: `secrets.token_urlsafe(32)`
-- Written to `{data_dir}/session.token`
-- Required as `X-Momodoc-Token` header on all API requests (except health and token endpoints)
-- The CLI reads the token automatically from the data directory
-- The web frontend fetches it via `GET /api/v1/token` (localhost-only)
-- Deleted on shutdown
+Behavior worth knowing:
 
-### Application Startup
+- `serve` rejects an already-running backend before booting uvicorn.
+- `serve` checks port availability before startup.
+- `stop` cleans stale PID/port/token files when it detects a dead process.
+- `status` is runtime-file based; it does not call the HTTP API.
 
-The lifespan sequence includes:
+## Startup Sequence
 
-The startup sequence is driven by `bootstrap/startup.py`:
+The authoritative startup flow lives in `backend/app/bootstrap/startup.py`.
 
-1. Configure logging (rotating file handlers for `momodoc.log` and `momodoc-startup.log`)
-2. Create data/upload/vector directories
-3. Initialize SQLite database engine (WAL mode, foreign keys ON, 5s busy timeout)
-4. Run Alembic migrations programmatically
-5. Verify embedding model consistency (`system_config` table)
-6. Initialize `VectorStore` (LanceDB) and `AsyncVectorStore`
-7. Initialize default LLM provider and `ProviderRegistry`
-8. Generate session token and write to disk (`session.token`, `0o600` permissions)
-9. Initialize `JobTracker` and recover stale jobs from previous crashes (`recover_stale_jobs()`)
-10. Initialize `WSManager` and `ProjectFileWatcher`
-11. Mark app ready and launch deferred startup task
+### Critical path
 
-**Deferred startup** (runs in background after the API is live):
-- Load embedding model (`nomic-ai/nomic-embed-text-v1.5`) via `Embedder`
-- Load cross-encoder reranker (if `RERANKER_ENABLED`; MiniLM on CPU, BGE on capable GPU)
-- Build FTS index asynchronously via `AsyncVectorStore.create_fts_index()`
-- Cleanup orphaned vectors (`maintenance.cleanup_orphaned_vectors`)
-- Auto-trigger sync for projects with `source_directory`
-- Start filesystem watchers for those projects
-- Broadcast progress via WebSocket `startup_progress` events
+Before requests are served, startup does the following:
 
-### Auto-Sync
+1. configures logging
+2. ensures data, upload, and vector directories exist
+3. loads persisted LLM settings from `settings.json`
+4. initializes the async SQLite engine/session factory
+5. runs Alembic migrations
+6. initializes `WSManager` (early, so startup broadcasts can use it)
+7. checks the recorded embedding model and triggers vector reset if needed
+8. initializes `VectorStore` and `AsyncVectorStore`
+9. initializes the provider registry and default LLM provider
+10. writes the session token to disk
+11. initializes `JobTracker` and recovers stale jobs
+12. initializes `ProjectFileWatcher` (lightweight; no watches started yet)
+13. seeds `app.state` and launches deferred startup tasks
 
-On startup, all projects with a `source_directory` are automatically synced in the background:
-- Sync jobs are launched via `asyncio.create_task()` (non-blocking — doesn't delay server startup)
-- Each project gets its own background job with progress tracking
-- Directories that no longer exist are skipped with a warning log
-- Sync progress events are broadcast via WebSocket to connected clients
-- Jobs are persisted in SQLite (`sync_jobs` + `sync_job_errors` tables). Stale jobs from crashes are recovered on startup.
-- Check server logs for sync progress and errors
+At this point the API is reachable, but `GET /api/v1/health` reports `"ready": false`. The session token file is written with restricted permissions (`0o600`, owner read/write only) to prevent other users on shared systems from reading it.
 
-## WebSocket
+### Deferred startup
 
-Real-time sync progress events are available via WebSocket:
+Background startup then:
 
-- **Endpoint:** `WS /ws?token=<session-token>`
-- **Auth:** Token via query parameter (not header — browsers can't send custom headers on WS handshakes)
-- **Events:** JSON messages with `type` field: `sync_progress`, `sync_complete`, `sync_failed`, `startup_progress`
-- **Manager:** `WSManager` in `core/ws_manager.py` — manages connections, broadcasts events to all connected clients
-- Alternative to polling `GET /files/sync/status` every second
+- loads the embedder
+- loads the reranker if enabled
+- builds the LanceDB FTS index
+- cleans orphaned vectors
+- starts auto-sync for projects with `source_directory`
+- starts file watchers for those projects
+- broadcasts `startup_progress` events over WebSocket
 
-## Makefile Targets
+## Auto-Sync and File Watching
 
-| Target | What it runs | Description |
-|--------|-------------|-------------|
-| `make momo-install` | Create venv + `pip install` + desktop `npm install` | Install backend and desktop dependencies |
-| `make dev` | `uvicorn --reload` | Start backend only with auto-reload |
-| `make dev-desktop` | `cd desktop && npm run dev` | Start Electron desktop app in dev mode |
-| `make build-desktop` | `cd desktop && npm run build` | Build desktop app bundles (compile only; no installer) |
-| `make package-desktop` | `cd desktop && npm run package:current` | Package desktop app for current platform (installer/archive) |
-| `make serve` | `momodoc serve` | Start the momodoc server |
-| `make stop` | `momodoc stop` | Stop a running momodoc instance |
-| `make status` | `momodoc status` | Check if momodoc is running |
-| `make test` | `cd backend && pytest` | Run backend test suite |
-| `make clean` | Stop server + remove data dir | Remove all data (DESTROYS DATA, requires confirmation) |
-| `make help` | Parse Makefile | Show all targets with descriptions |
+Projects with a `source_directory` participate in two related flows:
 
-To build the static frontend and serve it from FastAPI, run manually:
+- startup auto-sync launched from `bootstrap/startup.py`
+- live file watching started through `bootstrap/watcher.py`
+
+Current sync architecture:
+
+- one active sync job per project enforced by `JobTracker`
+- discovery and processing run through a bounded async queue
+- per-file progress is persisted in `sync_jobs`
+- file-level failures are recorded in `sync_job_errors`
+- WebSocket broadcasts `sync_progress`, `sync_complete`, and `sync_failed`
+
+Current watcher behavior:
+
+- debounce window: `0.5s`
+- ignores hidden filenames and ignored directory names
+- only reacts to supported extensions
+- create/modify events re-ingest files
+- delete events remove file rows and vectors
+
+## Makefile and Workspace Commands
+
+### Root Makefile
+
+| Command | What it actually does |
+|---|---|
+| `make momo-install` | Creates `backend/.venv`, installs backend package with dev extras, installs `desktop/` npm deps |
+| `make dev` | Runs uvicorn reload mode from the backend venv |
+| `make dev-desktop` | Runs `desktop` dev mode |
+| `make build-desktop` | Runs `desktop` compile/build only |
+| `make package-desktop` | Runs `desktop` packaging for the current platform |
+| `make serve` | Runs `backend/.venv/bin/momodoc serve` |
+| `make stop` | Runs `backend/.venv/bin/momodoc stop` |
+| `make status` | Runs `backend/.venv/bin/momodoc status` |
+| `make test` | Runs backend pytest only |
+| `make clean` | Stops Momodoc and deletes the data dir after confirmation |
+
+Important repo detail:
+
+- `make momo-install` does not install `frontend/` or `extension/` dependencies.
+- Install those workspaces manually when you need them.
+
+### Frontend workspace
 
 ```bash
-cd frontend && npm install && npm run build
-rm -rf backend/static && cp -R frontend/out backend/static
+cd frontend
+npm install
+npm run dev
+npm run build
+npm run test:unit
+npm run test:e2e
+```
+
+### Desktop workspace
+
+```bash
+cd desktop
+npm install
+npm run dev
+npm run build
+npm run typecheck
+npm run test:unit
+```
+
+### VS Code extension workspace
+
+```bash
+cd extension
+npm install
+npm run compile
+npm test
+npm run package
 ```
 
 ## Environment Variables
 
-All config is via `.env` file (see `.env.example`). Key variables:
+`Settings` in `backend/app/config.py` is the source of truth. Pydantic reads env vars using the field names in upper snake case.
 
-### Required for Chat
+### App and server
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `claude` | Default LLM backend (`claude`, `openai`, `gemini`, `ollama`) |
-| `ANTHROPIC_API_KEY` | — | Anthropic API key (required when `LLM_PROVIDER=claude`) |
-| `OPENAI_API_KEY` | — | OpenAI API key (required when `LLM_PROVIDER=openai`) |
-| `GOOGLE_API_KEY` | — | Google API key (required when `LLM_PROVIDER=gemini`) |
+| Env var | Default |
+|---|---|
+| `APP_NAME` | `momodoc` |
+| `DEBUG` | `false` |
+| `LOG_LEVEL` | `INFO` |
+| `HOST` | `127.0.0.1` |
+| `PORT` | `8000` |
+| `MOMODOC_DATA_DIR` | platform default |
+| `DATABASE_URL` | derived from `MOMODOC_DATA_DIR` |
+| `STATIC_DIR` | `backend/static` if present |
 
-### Optional — LLM Models (env fallback; UI settings take precedence)
+### LLM providers
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_MODEL` | `claude-sonnet-4-6` | Claude model identifier |
-| `OPENAI_MODEL` | `gpt-4o` | OpenAI model identifier |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model identifier |
-| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama API base URL |
-| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model identifier |
+| Env var | Default |
+|---|---|
+| `LLM_PROVIDER` | `claude` |
+| `ANTHROPIC_API_KEY` | empty |
+| `CLAUDE_MODEL` | `claude-sonnet-4-6` |
+| `OPENAI_API_KEY` | empty |
+| `OPENAI_MODEL` | `gpt-4o` |
+| `GOOGLE_API_KEY` | empty |
+| `GEMINI_MODEL` | `gemini-2.5-flash` |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` |
+| `OLLAMA_MODEL` | `qwen2.5-coder:7b` |
 
-### Optional — Server and Storage
+### Embedding and vector DB
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Server bind address |
-| `PORT` | `8000` | Server port |
-| `MOMODOC_DATA_DIR` | OS default | Override data directory |
-| `MAX_UPLOAD_SIZE_MB` | `100` | Max file upload size |
-| `MAX_FILE_SIZE_MB` | `200` | Max file size for directory indexing |
-| `DEBUG` | `false` | Enable debug mode |
-| `ALLOWED_INDEX_PATHS` | `[]` | Whitelisted directories for codebase indexing (empty = all rejected) |
-| `DB_POOL_SIZE` | `5` | SQLAlchemy connection pool size |
-| `DB_MAX_OVERFLOW` | `10` | Maximum overflow connections |
-| `VECTORDB_SEARCH_NPROBES` | `24` | LanceDB search nprobes (higher = more accurate, slower) |
-| `VECTORDB_SEARCH_REFINE_FACTOR` | `2` | LanceDB refine factor |
-| `VECTORDB_MAX_READ_CONCURRENCY` | — | Max concurrent LanceDB reads via `AsyncVectorStore` |
+| Env var | Default |
+|---|---|
+| `EMBEDDING_MODEL` | `nomic-ai/nomic-embed-text-v1.5` |
+| `EMBEDDING_DIMENSION` | `768` |
+| `EMBEDDING_DEVICE` | empty, auto-detect at runtime |
+| `EMBEDDING_TRUST_REMOTE_CODE` | `true` |
+| `EMBEDDING_MAX_WORKERS` | CPU-derived |
+| `VECTORDB_MAX_WORKERS` | CPU-derived |
+| `VECTORDB_MAX_READ_CONCURRENCY` | CPU-derived |
+| `VECTORDB_SEARCH_NPROBES` | `32` |
+| `VECTORDB_SEARCH_REFINE_FACTOR` | `2` |
 
-### Optional — Reranker
+### Ingestion and storage
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RERANKER_ENABLED` | `true` | Enable the cross-encoder reranker for two-stage retrieval |
-| `RERANKER_MODEL` | (auto-detect) | Reranker model name. Empty means auto-detect based on hardware (MiniLM on CPU, BGE on GPU) |
-| `RERANKER_DEVICE` | (auto-detect) | Force a device for the reranker (`cpu`, `cuda`, `mps`). Empty means auto-detect |
-| `RERANKER_MAX_WORKERS` | `2` | Thread pool size for the reranker |
-| `RERANKER_TOP_K` | `10` | Number of results after reranking |
-| `RETRIEVAL_CANDIDATE_K` | `50` | Number of candidates fetched before reranking (overretrieval factor) |
+| Env var | Default |
+|---|---|
+| `SYNC_MAX_CONCURRENT_FILES` | `4` |
+| `SYNC_QUEUE_SIZE` | `64` |
+| `INDEX_MAX_CONCURRENT_FILES` | `4` |
+| `INDEX_DISCOVERY_BATCH_SIZE` | `256` |
+| `CHUNK_SIZE_DEFAULT` | `2000` |
+| `CHUNK_OVERLAP_DEFAULT` | `200` |
+| `CHUNK_SIZE_CODE` | `2000` |
+| `CHUNK_SIZE_PDF` | `3000` |
+| `CHUNK_SIZE_MARKDOWN` | `2000` |
+| `MAX_UPLOAD_SIZE_MB` | `100` |
+| `MAX_FILE_SIZE_MB` | `200` |
+| `ALLOWED_INDEX_PATHS` | empty list |
 
-## CLI
+### Database pool
 
-The CLI is built with Typer + Rich and lives in `backend/cli/`. The top-level composition is in `cli/main.py`, with server commands in `cli/commands/server.py` and RAG evaluation in `cli/commands/rag_eval.py`. It communicates with the running backend via HTTP (it does not access the DB directly).
+| Env var | Default |
+|---|---|
+| `DB_POOL_SIZE` | `5` |
+| `DB_MAX_OVERFLOW` | `10` |
 
-### Running CLI Commands
+### Reranker
+
+| Env var | Default |
+|---|---|
+| `RERANKER_ENABLED` | `true` |
+| `RERANKER_MODEL` | empty |
+| `RERANKER_DEVICE` | empty |
+| `RERANKER_MAX_WORKERS` | `2` |
+| `RETRIEVAL_CANDIDATE_K` | `50` |
+
+### Chat rate limiting
+
+| Env var | Default |
+|---|---|
+| `CHAT_RATE_LIMIT_ENABLED` | `true` |
+| `CHAT_RATE_LIMIT_WINDOW_SECONDS` | `60` |
+| `CHAT_RATE_LIMIT_GLOBAL_REQUESTS` | `120` |
+| `CHAT_RATE_LIMIT_CLIENT_REQUESTS` | `30` |
+| `CHAT_STREAM_RATE_LIMIT_GLOBAL_REQUESTS` | `60` |
+| `CHAT_STREAM_RATE_LIMIT_CLIENT_REQUESTS` | `15` |
+
+## Static Frontend Serving
+
+FastAPI serves a built static frontend when `backend/static/` exists.
+
+Current web build flow:
 
 ```bash
-cd backend && pip install -e .
-momodoc serve                              # Start the server
-momodoc project list                       # List projects
-momodoc ingest file proj ./f.pdf           # Ingest a file
-momodoc chat proj -q "question"            # Chat (single query)
-momodoc chat proj                          # Interactive chat mode
-momodoc chat proj --model gemini           # Chat with specific LLM provider
-momodoc rag-eval proj -q "query" -k 5     # RAG retrieval evaluation
+cd frontend
+npm install
+npm run build
+rm -rf ../backend/static
+cp -R out ../backend/static
 ```
 
-### Available CLI Command Groups
+The static mount is registered after API routes, so `/api/v1/...` keeps priority.
 
-- `serve` / `stop` / `status` — Server lifecycle (in `cli/commands/server.py`)
-- `project` — create, list, show, delete
-- `ingest` — file, dir
-- `note` — add, list
-- `issue` — add, list, done
-- `search` — vector search (no LLM)
-- `chat` — single query or interactive mode (supports `--model` flag for LLM provider override)
-- `rag-eval` — RAG retrieval quality evaluation (Recall@K, Precision@K, Hit Rate@K, MRR)
+## CLI Notes
 
-### Token and Port Auto-detection
+The CLI is HTTP-based. It does not open the database directly.
 
-The CLI (`cli/utils.py`) automatically:
-- Reads the port from `{data_dir}/momodoc.port` to find the running server
-- Reads the token from `{data_dir}/session.token` and includes it in `X-Momodoc-Token` header
-- Falls back to `MOMODOC_API_URL` env var or `http://127.0.0.1:8000` default
+Current command groups:
 
-## VS Code Extension
+- `project`
+- `ingest`
+- `note`
+- `issue`
 
-The `extension/` directory contains a VS Code extension for sidecar lifecycle management:
+Current top-level commands:
 
-- Auto-starts the backend when VS Code opens (if not already running)
-- Status bar indicator showing server state
-- Chat sidebar (webview) for RAG-powered Q&A
-- Right-click context menu to ingest files into a project
-- Respects `MOMODOC_DATA_DIR` environment variable (reads port/token/PID from the custom location)
+- `search`
+- `chat`
+- `rag-eval`
+- `serve`
+- `stop`
+- `status`
 
-## Service URL
+### CLI HTTP client
 
-When running: `http://127.0.0.1:8000` (both frontend and API on same port).
-API docs at `/docs`.
+All CLI commands (except `serve`/`stop`/`status`) connect to the backend via HTTP using a shared `api_client()` utility in `cli/utils.py`. This client resolves the backend URL through a 3-step fallback:
+
+1. `MOMODOC_API_URL` environment variable
+2. the port from `momodoc.port` file in the data directory
+3. fallback to `http://127.0.0.1:{settings.port}`
+
+It also automatically reads the session token from `session.token` and attaches it as an `X-Momodoc-Token` header. Default HTTP timeout is 120 seconds.
+
+Important current behavior:
+
+- `search` is retrieval-only and does not call an LLM.
+- `chat` supports `--model` for provider override and has two modes: `--query` for a single non-interactive query, and (when `--query` is omitted) a full interactive REPL with persistent session, multi-turn conversation, and exit on `exit`/`quit`/`Ctrl+C`.
+- `rag-eval` bypasses the HTTP API entirely and loads `Embedder`, `VectorStore`, and `AsyncVectorStore` directly in-process. It supports `--output` for writing a JSON report, `--max-cases` to cap evaluation size, and `--concurrency` (default 8) for parallel retrieval. Metrics include recall@K, precision@K, hit rate@K, and MRR. Note: runs the embedding model in a separate process, so high memory usage if the backend is also running.
+
+## Desktop and Extension Operational Notes
+
+### Shutdown sequence
+
+The backend lifespan shutdown performs ordered resource teardown:
+
+1. Stop all file watchers
+2. Shutdown embedder thread pool and loky process pool
+3. Shutdown reranker thread pool
+4. Cancel deferred FTS index task (with `asyncio.CancelledError` suppression)
+5. Shutdown vector DB executor
+6. Remove `session.token`
+
+### Desktop
+
+- The packaged desktop app resolves a backend launch command through `resolveBackendLaunchCommand()`: looks for `backend-runtime/run-backend.sh` (Unix) or `run-backend.cmd`/`run-backend.ps1` (Windows) under `process.resourcesPath`; on Windows falls back from `.cmd` to PowerShell with `-ExecutionPolicy Bypass`; in dev mode falls back to `momodoc serve`.
+- The child process is spawned detached (`detached: true`) and unref'd so Electron dev restarts only kill Electron, not the backend.
+- The sidecar has a structured startup state machine (`idle` -> `starting` -> `ready`/`failed`/`stopped`) and classifies failures into categories: `spawn-error`, `timeout`, `port-conflict`, `runtime-error`, `unknown`. Stderr is pattern-matched for `port.*already in use` and `error` to classify in real time.
+- When a stale PID file is found with a live process, the sidecar polls the health endpoint for 20 seconds; if unresponsive, it sends `SIGKILL` and starts fresh. New process spawn has a 30-second readiness timeout.
+- The sidecar only stops the backend if it owns the process it started.
+- The desktop app logs sidecar lifecycle messages to `sidecar.log`.
+- Desktop `ConfigStore.toEnvVars()` does NOT inject LLM settings (provider, API keys, models) as environment variables -- those are managed exclusively through `settings.json` via the settings API. Only infrastructure settings are env-var-injected: `PORT`, `HOST`, `MOMODOC_DATA_DIR`, `LOG_LEVEL`, `DEBUG`, and all chunking/rate-limiting/concurrency/retrieval settings.
+
+### VS Code extension
+
+- The extension does not auto-start the backend on activation.
+- It registers commands to start/stop the server, open the web UI, ingest a file, and open settings.
+- On activation it only checks whether a backend is already running and updates the status bar/output channel accordingly.

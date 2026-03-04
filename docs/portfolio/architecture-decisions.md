@@ -1,103 +1,209 @@
-# Architecture Decision Records
+# Architecture Decisions
 
-Each entry documents a key technical decision: the context, the options considered, the choice made, and the rationale.
+Last verified against source on 2026-03-04.
 
-## ADR-1: SQLite over PostgreSQL
+Each entry below reflects a decision that is still visible in the current codebase.
 
-**Context**: The application needs a relational store for metadata (projects, files, notes, issues, chat sessions, sync jobs).
+## ADR-1: SQLite Instead Of PostgreSQL
 
-**Options considered**:
-1. **PostgreSQL**: Full-featured RDBMS with excellent concurrency, JSON support, and extensions.
-2. **SQLite**: Embedded, zero-config, single-file database.
+Context:
 
-**Decision**: SQLite.
+Momodoc needs relational storage for metadata, chat history, sync jobs, and migration-backed schema evolution.
 
-**Rationale**: Momodoc is a single-user, single-machine application. Requiring users to install, configure, and maintain a PostgreSQL server (or Docker container) for a personal tool is disproportionate overhead. SQLite provides ACID transactions, foreign keys, and sufficient throughput for the workload. WAL mode handles the primary concurrency concern (reads during sync writes). The tradeoff is no multi-user access and no network accessibility, which are non-requirements.
+Decision:
 
-## ADR-2: LanceDB over Cloud Vector Databases
+Use SQLite in WAL mode.
 
-**Context**: The system needs a vector store for embedding-based retrieval.
+Rationale:
 
-**Options considered**:
-1. **Pinecone/Weaviate/Qdrant (cloud)**: Managed vector databases with scaling and managed infrastructure.
-2. **FAISS (in-memory)**: High-performance ANN search, pure vector index.
-3. **LanceDB (embedded)**: Persistent embedded vector database with FTS support.
+- zero external service requirement
+- good fit for single-user local workloads
+- straightforward Alembic migration story
+- concurrent reads during writes are good enough for the app's sync and UI patterns
 
-**Decision**: LanceDB.
+Tradeoff:
 
-**Rationale**: Cloud vector databases require API keys, internet access, and ongoing costs, contradicting the local-first, free-to-run design. FAISS is in-memory only and loses data on restart (requiring index rebuilds). LanceDB provides persistent storage, built-in Tantivy FTS (enabling hybrid search without a separate index), and SQL-like filtering for project-scoped queries. The tradeoff is less maturity and community support than FAISS or Pinecone, which is acceptable at personal scale.
+- not designed for multi-user or networked deployment
 
-## ADR-3: sentence-transformers over API Embeddings
+## ADR-2: LanceDB Instead Of A Cloud Vector Database
 
-**Context**: Documents and notes need to be embedded for vector search.
+Context:
 
-**Options considered**:
-1. **OpenAI/Cohere embedding APIs**: Higher quality embeddings, no local compute.
-2. **sentence-transformers (local)**: CPU-based embedding with no API costs.
+Retrieval needs persistent local vector search plus FTS without introducing hosted infrastructure.
 
-**Decision**: Local sentence-transformers (`all-MiniLM-L6-v2`, 384 dimensions).
+Decision:
 
-**Rationale**: A personal knowledge tool that charges per embedding request contradicts the free-to-run principle. Local embedding also eliminates latency (no network round-trip) and privacy concerns (content never leaves the machine). MiniLM-L6-v2 is a deliberate quality/efficiency tradeoff: it scores lower on MTEB benchmarks than larger models, but runs fast on CPU and produces good enough results for personal document retrieval where the user knows the vocabulary.
+Use embedded LanceDB.
 
-## ADR-4: Static Export over Server-Side Rendering
+Rationale:
 
-**Context**: The web frontend needs to be served to users.
+- local persistence
+- hybrid retrieval support through LanceDB search primitives
+- metadata filtering for project and source scoping
+- no API keys or hosted vector bill
 
-**Options considered**:
-1. **Next.js SSR**: Server-rendered pages with dynamic data fetching.
-2. **Next.js static export**: Pre-built HTML/JS/CSS served as static files.
-3. **Plain React (Vite)**: No framework, just bundled React.
+Tradeoff:
 
-**Decision**: Next.js static export.
+- fewer operational guarantees than large managed vector systems
 
-**Rationale**: SSR requires a running Node.js process, adding a second server to manage alongside the Python backend. Static export produces files that FastAPI serves directly via `SPAStaticFiles`, keeping the deployment to a single process. Next.js was retained (over plain React/Vite) because the frontend was already using it and the migration cost was not justified. The tradeoff is losing SSR and API routes, which are unnecessary for a local tool that authenticates via session token and fetches all data client-side.
+## ADR-3: Local Embeddings Instead Of API Embeddings
 
-## ADR-5: State-Based Routing over File-Based Routing
+Context:
 
-**Context**: The frontend needs view navigation (dashboard, project detail).
+Every indexed chunk needs embeddings, and the product goal is local-first operation.
 
-**Options considered**:
-1. **Next.js App Router**: File-based routing with URL segments.
-2. **State-based routing**: `useState<View>` with conditional rendering.
+Decision:
 
-**Decision**: State-based routing.
+Use local `sentence-transformers` models.
 
-**Rationale**: The static export cannot handle dynamic URL segments (`/projects/[id]`) without server-side rewrites. The application has exactly two primary views (dashboard and project), making URL-based routing unnecessary complexity. State-based routing keeps navigation as simple function calls (`setView("project"); setProjectId(id)`). The tradeoff is no deep-linking and no browser history navigation, which are acceptable for a local tool where the entry point is always the dashboard.
+Rationale:
 
-## ADR-6: Sidecar Process over Embedded Server
+- no per-document API cost
+- works offline after model download
+- keeps source text local
+- model choice can still evolve through a local registry
 
-**Context**: The desktop app needs the Python backend to be running.
+Tradeoff:
 
-**Options considered**:
-1. **Embedded Python (PyInstaller/cx_Freeze)**: Bundle Python into the Electron app as a single binary.
-2. **Sidecar process**: Electron spawns and manages the backend as a child process.
-3. **User-managed**: Require users to start the backend manually.
+- higher local CPU or GPU cost than a hosted API
 
-**Decision**: Sidecar process.
+## ADR-4: Static Frontend Export Instead Of A Separate Frontend Server
 
-**Rationale**: Embedding Python into Electron creates complex build and debugging challenges (two runtimes in one process, platform-specific binary packaging). User-managed startup is poor UX for a desktop app. The sidecar pattern provides clean separation: Electron manages the process lifecycle while the backend runs independently. The sidecar can also detect and reuse an already-running backend (started via CLI), preventing port conflicts. The tradeoff is process management complexity (health polling, stale PID cleanup, shutdown coordination), which is addressed by the shared `sidecarLifecycleCore`.
+Context:
 
-## ADR-7: No Chunks Table in SQLite
+The browser UI needs to ship without adding another always-on runtime.
 
-**Context**: Chunk metadata (text, index, source reference) needs to be stored alongside embeddings.
+Decision:
 
-**Options considered**:
-1. **Chunks table in SQLite**: Normalized relational storage with a foreign key to files/notes.
-2. **Chunk fields in LanceDB records**: Store all chunk metadata as LanceDB record fields alongside the vector.
+Build the frontend as a static export and serve it from FastAPI.
 
-**Decision**: All chunk data in LanceDB records only.
+Rationale:
 
-**Rationale**: Separating chunks across two stores introduces a join problem: every search result would require a cross-store lookup (LanceDB for the vector match, SQLite for the chunk text). Storing everything in LanceDB records means search results are self-contained. The tradeoff is that non-vector queries about chunks (listing all chunks for a file) must use LanceDB's metadata filtering rather than SQL, which is less flexible but sufficient for the access patterns needed.
+- one backend process serves both API and UI
+- no separate Node server in production
+- works well with SPA fallback behavior in `SPAStaticFiles`
 
-## ADR-8: Async Wrapper with RW Lock over Native Async Driver
+Tradeoff:
 
-**Context**: LanceDB is synchronous. The backend is fully async (FastAPI + SQLAlchemy async).
+- no SSR-based features and no server-side Next.js runtime
 
-**Options considered**:
-1. **Wait for native async LanceDB**: LanceDB has discussed async support but it was not available.
-2. **Simple `asyncio.to_thread()` per call**: Wrap each LanceDB call individually.
-3. **Dedicated `AsyncVectorStore` with executor, semaphore, and lock**: Purpose-built async wrapper.
+## ADR-5: State-Based App Navigation Instead Of Route-Heavy Client Navigation
 
-**Decision**: Purpose-built `AsyncVectorStore`.
+Context:
 
-**Rationale**: Simple `to_thread()` wrapping does not address concurrency: multiple concurrent reads during a sync job could saturate the default thread pool, and concurrent writes could corrupt data. The `AsyncVectorStore` provides three coordinated mechanisms: a dedicated `ThreadPoolExecutor` (isolation from other CPU-bound work), a `Semaphore` (bounded read concurrency), and a `Lock` (writer-exclusive access). The tradeoff is additional complexity in the wrapper, but this complexity is isolated in one module (`core/async_vectordb.py`) and provides correctness guarantees that simple wrapping cannot.
+The current product has a small number of primary views and does not rely on deep-link-heavy navigation.
+
+Decision:
+
+Use internal view state for most client navigation.
+
+Rationale:
+
+- simpler desktop and static-web behavior
+- avoids dynamic route complexity for the current app shape
+- makes shared renderer components easier to reuse between web and desktop
+
+Tradeoff:
+
+- limited deep-linking and browser-history semantics
+
+## ADR-6: Electron Sidecar Instead Of Requiring Users To Start The Backend Manually
+
+Context:
+
+The desktop app needs a usable backend without expecting terminal setup on every launch.
+
+Decision:
+
+Have Electron manage backend lifecycle as a sidecar.
+
+Rationale:
+
+- better desktop UX
+- ability to reuse an already-running backend when available
+- clean separation between Electron shell concerns and Python backend concerns
+
+Tradeoff:
+
+- more lifecycle and recovery logic in the main process
+
+## ADR-7: Keep Chunk Rows In LanceDB, Not SQLite
+
+Context:
+
+Search and chat need chunk text and metadata immediately after retrieval.
+
+Decision:
+
+Store chunk rows only in LanceDB and keep only summary metadata in SQLite.
+
+Rationale:
+
+- retrieval results are self-contained
+- no mandatory cross-store join to render a search result or citation
+- chunk metadata naturally travels with the vector record
+
+Tradeoff:
+
+- chunk maintenance flows use LanceDB APIs rather than relational queries
+
+## ADR-8: Wrap LanceDB In `AsyncVectorStore`
+
+Context:
+
+The backend is async, but LanceDB operations are synchronous.
+
+Decision:
+
+Use a dedicated async wrapper with its own executor, semaphore, and reader/writer coordination.
+
+Rationale:
+
+- protects the event loop
+- prevents uncontrolled read bursts
+- gives writes a path that cannot be starved by searches
+
+Tradeoff:
+
+- additional concurrency code to maintain
+
+## ADR-9: Use Deferred Startup For Heavy Retrieval Dependencies
+
+Context:
+
+Embedder load, reranker load, FTS build, orphan cleanup, and watcher startup are too expensive to keep on the critical path.
+
+Decision:
+
+Serve requests after the critical startup path, then finish expensive initialization in the background.
+
+Rationale:
+
+- faster time-to-first-response for the backend process
+- startup stays predictable even when models are large
+- long-running initialization steps can broadcast progress independently
+
+Tradeoff:
+
+- early requests can temporarily see reduced capabilities
+
+## ADR-10: Use A Metadata-Driven Provider Registry For LLMs
+
+Context:
+
+Supporting multiple LLM providers can easily spread provider-specific conditionals everywhere.
+
+Decision:
+
+Centralize provider creation and availability checks in a registry plus metadata table.
+
+Rationale:
+
+- one place to add providers
+- lazy construction
+- runtime hot reload when settings change
+- cleaner router and service code
+
+Tradeoff:
+
+- the registry becomes a critical abstraction point that has to stay aligned with settings and provider modules

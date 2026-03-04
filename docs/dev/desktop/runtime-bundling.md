@@ -1,71 +1,130 @@
-# Desktop Backend Runtime Bundling (Internal)
+# Desktop Backend Runtime Bundling
 
-Last verified version: `0.1.0` (local package + packaged launcher smoke, 2026-02-25)
+Last verified against source on 2026-03-04.
 
 ## Purpose
 
-Document how the Electron desktop app bundles and launches the backend runtime so packaged builds do not require a PATH-installed `momodoc` CLI.
+Packaged desktop builds bundle a backend runtime so the Electron app can launch `momodoc` without requiring the user to install the CLI separately.
 
-## Source Files
+Relevant source files:
 
-- `/Users/mohamedibrahim/momodoc/desktop/scripts/stage-backend-runtime.mjs`
-- `/Users/mohamedibrahim/momodoc/desktop/electron-builder.yml`
-- `/Users/mohamedibrahim/momodoc/desktop/src/main/backend-launch.ts`
-- `/Users/mohamedibrahim/momodoc/desktop/src/main/sidecar.ts`
-- `/Users/mohamedibrahim/momodoc/backend/cli/sidecar_entry.py`
+- `desktop/scripts/stage-backend-runtime.mjs`
+- `desktop/src/main/backend-launch.ts`
+- `desktop/src/main/sidecar.ts`
+- `desktop/electron-builder.yml`
+- `backend/cli/sidecar_entry.py`
 
-## Packaging Flow (Current)
+## What Gets Staged
 
-1. `npm run stage:backend-runtime`
-   - Stages a backend runtime into `desktop/.backend-runtime-staging/`
-2. `electron-builder` packages desktop app
-3. `extraResources` copies staged runtime into:
-   - `Momodoc.app/Contents/Resources/backend-runtime` (macOS packaged app path)
-4. Desktop sidecar resolves launch strategy in packaged builds:
-   - bundled `backend-runtime/run-backend.sh` (preferred)
-   - system `momodoc serve` fallback (dev/unpackaged and fallback path)
+`npm run stage:backend-runtime` copies the backend into `desktop/.backend-runtime-staging/backend/`.
 
-## Runtime Launch Order (Packaged Desktop)
+Required inputs:
 
-- Desktop app bootstraps Electron runtime (`app-runtime.ts`)
-- `SidecarManager.start()` checks for existing healthy backend first
-- If none exists, it resolves a packaged backend launcher
-- Sidecar spawns bundled runtime with config-derived environment variables
-- Sidecar waits for health readiness and then publishes backend-ready status to renderer
+- `backend/app`
+- `backend/cli`
+- `backend/migrations`
+- `backend/alembic.ini`
+- `backend/pyproject.toml`
+- `backend/.venv`
 
-## Why This Improves UX
+The staging script fails fast if any of those paths are missing.
 
-Users can install and launch the desktop app without:
-- installing Python
-- activating a virtualenv
-- adding `momodoc` to PATH
-- manually starting the backend in a terminal
+## Copy Filters
 
-## Known Limitations (Current Strategy)
+The staging script removes cache and non-runtime content while copying. Current exclusions include:
 
-Current bundling stages the local backend `.venv`, which can be machine-specific.
+- `__pycache__`
+- `.pytest_cache`
+- `.ruff_cache`
+- `.mypy_cache`
+- `backend/tests`
+- `.venv/include`
+- selected native-package include trees
+- `.pyc`
+- wheel metadata files such as `RECORD` and `INSTALLER`
 
-Notable risk:
-- Python interpreter symlink portability (especially Homebrew-based macOS setups)
+This is still a source copy of the current backend plus its local virtualenv, not a platform-neutral artifact.
 
-This is sufficient for:
-- local packaged builds
-- validating removal of PATH dependency
+## Generated Launchers
 
-It is not yet a hardened cross-machine runtime packaging strategy.
+The staging step writes these launchers at the staging root:
 
-## Verification Evidence (Local)
+- `run-backend.sh`
+- `run-backend.cmd`
+- `run-backend.ps1`
+- `backend-runtime.json`
 
-- Packaged app resources contain `backend-runtime/`
-- Packaged launcher can:
-  - `status`
-  - `serve`
-  - pass `/api/v1/health`
-  - `stop`
-- Verification used a stripped `PATH` to confirm no PATH dependency in packaged launcher path
+`backend-runtime.json` records the generation timestamp, bundled entries, and portability notes.
 
-## Future Hardening Options
+## Launcher Resolution Order
 
-- OS-specific self-contained Python runtime bundle
-- standalone backend binaries per platform/arch
-- CI-built backend runtime artifacts with portability checks
+The packaged desktop app resolves its backend command through `resolveBackendLaunchCommand(...)`.
+
+### Packaged macOS and Linux
+
+The main process prefers:
+
+1. `backend-runtime/run-backend.sh`
+2. fallback to `momodoc serve` if no bundled launcher is available
+
+Inside `run-backend.sh`, execution order is:
+
+1. bundled `.venv/bin/python`
+2. bundled `.venv/bin/python3`
+3. system `python3` with `PYTHONPATH` pointed at the bundled backend and site-packages
+4. `momodoc` from `PATH`
+
+### Packaged Windows
+
+The main process prefers:
+
+1. `backend-runtime/run-backend.cmd`
+2. `powershell.exe -File backend-runtime/run-backend.ps1`
+3. fallback to `momodoc serve` if neither launcher exists
+
+Inside the Windows launchers, execution order is:
+
+1. bundled `.venv\\Scripts\\python.exe`
+2. `momodoc` from `PATH`
+
+There is no system-Python fallback in the Windows launcher scripts.
+
+### Development / Unpackaged Runs
+
+When `app.isPackaged` is false, the desktop runtime skips bundled-launcher resolution and starts:
+
+- `momodoc serve`
+
+That is why local desktop development still depends on the backend CLI being available in the environment.
+
+## Packaging Integration
+
+`electron-builder.yml` copies the staged runtime into packaged app resources with:
+
+```yaml
+extraResources:
+  - from: .backend-runtime-staging
+    to: backend-runtime
+```
+
+That yields a packaged resource directory shaped like:
+
+- `Resources/backend-runtime/backend/...`
+- `Resources/backend-runtime/run-backend.sh` or Windows equivalents
+
+## Runtime Behavior
+
+At app startup:
+
+1. `SidecarManager` first checks whether a healthy backend already exists.
+2. If none is available, it resolves the launch command.
+3. It spawns the backend detached with config-derived environment variables.
+4. It waits up to 30 seconds for health readiness.
+5. On success, startup state becomes `ready`.
+6. On failure, startup state becomes `failed` with a category such as `spawn-error`, `timeout`, or `port-conflict`.
+
+## Current Limitations
+
+- The bundled `.venv` is copied from the local machine and may contain machine-specific interpreter paths.
+- This packaging strategy is suitable for local packaging and smoke testing, but it is not yet a hardened cross-machine runtime distribution format.
+- Dev mode still relies on `momodoc` being available outside the packaged app.

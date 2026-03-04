@@ -1,293 +1,363 @@
 # Ingestion Pipeline
 
-The ingestion pipeline lives in `backend/app/services/ingestion/`. It handles parsing, chunking, embedding, and storing file and note content as vectors.
+Last verified against source on 2026-03-04.
 
-## Pipeline Stages
+## Source Of Truth
 
+- `backend/app/services/ingestion/pipeline.py`
+- `backend/app/services/ingestion/chunking_policy.py`
+- `backend/app/services/ingestion/parser_registry.py`
+- `backend/app/services/ingestion/parsers/*`
+- `backend/app/services/ingestion/chunkers/*`
+- `backend/app/services/note_service.py`
+- `backend/app/services/issue_service.py`
+
+## Scope
+
+Momodoc has three indexing paths that all write into the shared LanceDB `chunks` table:
+
+- files via `IngestionPipeline`
+- notes via `note_service._index_note(...)`
+- issues via `issue_service._index_issue(...)`
+
+Files are the most complex path. Notes and issues use narrower, purpose-built indexers.
+
+## File Ingestion Flow
+
+`IngestionPipeline.ingest_file(...)` currently performs:
+
+```text
+file path
+  -> file-size guard
+  -> SHA-256 checksum
+  -> existing-file lookup
+  -> parser selection
+  -> chunking policy
+  -> embedding in batches
+  -> LanceDB writes
+  -> old-vector cleanup for re-ingestion
+  -> SQL metadata commit
 ```
-Upload / Directory scan
-    ↓
-Checksum (SHA-256)
-    ↓
-Deduplication check (same path + same checksum = skip)
-    ↓
-Parse (extract text + heading hierarchy from file)
-    ↓
-Chunk (split text into segments with section breadcrumbs)
-    ↓
-Embed (nomic-embed-text-v1.5, 768 dimensions; heading context prepended)
-    ↓
-Store (add to LanceDB with rich metadata + section_header)
-```
 
-The orchestrator is the `IngestionPipeline` class in `services/ingestion/pipeline.py`. It is instantiated per-request with injected dependencies (DB session, VectorStore, Embedder). Parser selection is managed by `parser_registry.py`, chunking policy by `chunking_policy.py`, and directory traversal by `directory_walk.py`.
+The pipeline is instantiated with:
 
-## Smart Re-ingestion
+- an `AsyncSession`
+- `AsyncVectorStore`
+- `Embedder`
+- optional `Settings`
+- optional `ParserRegistry`
+- optional `ChunkingPolicy`
 
-Files are identified by `(project_id, original_path or filename)`:
+## Existing-File Matching
 
-- **Same checksum** → file is **skipped** (no reprocessing)
-- **Different checksum** → old vectors are **deleted** from LanceDB, file is **re-indexed**
-- **New file** → indexed from scratch
+Re-ingestion lookup is not a simple filename match.
 
-Checksums are SHA-256 hex digests computed from file contents.
+Current matching rules:
+
+- if the identifier looks like a path, match on normalized `original_path`
+- otherwise fall back to `(project_id, filename, is_managed)`
+
+Important edge cases:
+
+- path identifiers are normalized with `os.path.realpath(...)`
+- filename fallback is only used when the input is not path-like
+- ambiguous filename fallback returns no match instead of guessing
+- path collisions choose the most recent record and log a warning
+
+## Re-Ingestion Semantics
+
+Current behavior is:
+
+- same checksum: skip indexing and return the existing `chunk_count`
+- new checksum on an existing file: collect current vector ids, write new vectors, then delete old ones
+- new file: create the `files` row first and commit it before vector work starts
+
+The re-ingestion path intentionally uses add-then-delete. That keeps retrieval coverage intact if the process fails mid-update.
 
 ## Error Handling
 
-`ingest_file()` is designed to be resilient — it returns an `IngestionResult` with an `errors` list rather than raising exceptions. This is critical for directory ingestion where one bad file should not halt the entire walk.
+`ingest_file(...)` returns `IngestionResult` for normal per-file failures rather than raising, so batch and sync flows can continue.
 
-| Error scenario | Behavior |
+| Scenario | Current behavior |
 |---|---|
-| **File unreadable** (checksum fails) | Returns `IngestionResult(errors=["File read error: ..."])`. No DB record created. |
-| **Parse failure** (corrupt PDF, bad encoding) | Returns `IngestionResult(errors=["Parse error: ..."])`. File record may exist but has 0 chunks. |
-| **Unsupported extension** | Returns `IngestionResult(errors=["No parser for extension: ..."])`. File record exists with 0 chunks. |
-| **Vector storage fails** (LanceDB write error) | Rolls back DB transaction (`db.rollback()`), returns `IngestionResult(errors=["Vector storage failed: ..."])`. For new files this removes the flushed File record; for re-ingestion it preserves the old checksum so the next attempt can retry. |
-| **Vector storage fails during re-ingestion** | Logged at `CRITICAL` level because old vectors were already deleted. DB rollback preserves old checksum, so the next ingestion attempt sees the content change and retries the full cycle. |
-
-## Parsers
-
-Parsers live in `services/ingestion/parsers/`. Each extends the `FileParser` base class with `supports(ext)` and `parse(file_path)` methods. The `parse()` method returns a `ParsedContent` dataclass with `text`, `language`, `metadata`, and `headings` fields.
-
-| Parser | File | Handles | Library |
-|--------|------|---------|---------|
-| `PdfParser` | `pdf_parser.py` | `.pdf` | pymupdf4llm (converts to Markdown) |
-| `DocxParser` | `docx_parser.py` | `.docx` | python-docx (extracts paragraphs) |
-| `MarkdownParser` | `markdown_parser.py` | `.md`, `.markdown`, `.rst`, `.txt` | Read as-is |
-| `CodeParser` | `code_parser.py` | All code extensions | Read as-is, detect language from extension |
-
-The pipeline tries parsers in order and uses the first one that `supports()` the extension.
-
-### Heading Extraction
-
-`MarkdownParser` and `PdfParser` extract document heading hierarchy via the shared `heading_extractor.py` module. Each heading is a dict with `level` (int, 1-6), `text` (str), and `char_offset` (int, character position in the source text).
-
-Supported heading formats:
-- ATX-style markdown headings (`#` through `######`)
-- RST underline-style headings (text followed by a line of repeated punctuation)
-
-`CodeParser` and `DocxParser` return an empty headings list. The headings are used downstream by the `SectionAwareTextChunker` to build section breadcrumbs for each chunk.
-
-## Chunkers
-
-Chunkers live in `services/ingestion/chunkers/`. Each extends a base class with a `chunk(text, metadata)` method.
-
-### SectionAwareTextChunker (`text_chunker.py`)
-
-- **Strategy:** Splits at heading boundaries first, then recursively by paragraph → line → sentence → word
-- **Max chunk size:** 2000 characters (configurable per file type)
-- **Overlap:** 200 characters between consecutive chunks within a section
-- **Section headers:** Each chunk carries a `section_header` breadcrumb derived from the active heading hierarchy (e.g. "Architecture > Data Storage > SQLite Tables")
-- **Embedding enrichment:** The pipeline prepends the section_header to the chunk text before embedding, giving the embedding model structural context. The stored `chunk_text` remains clean (no prepended header).
-- Used for: documents, markdown, plain text, PDFs
-- When no headings are available, output is identical to the legacy TextChunker
-
-### TextChunker (`text_chunker.py`)
-
-- **Strategy:** Recursive splitting by paragraph → line → sentence → word boundaries
-- **Max chunk size:** 2000 characters
-- **Overlap:** 200 characters between consecutive chunks
-- Kept for backward compatibility and used as the inner splitter within SectionAwareTextChunker
-- Used for: notes, code fallback
-
-### TreeSitterChunker (`treesitter_chunker.py`)
-
-- **Strategy:** AST-based code chunking using tree-sitter parsers
-- **Max chunk size:** 2000 characters (configurable per file type)
-- **Languages:** 13 supported — Python, JavaScript, TypeScript, TSX, Java, Go, Rust, C, C++, Ruby, PHP
-- **Lazy loading:** Parsers loaded on first use and cached per language (class-level cache)
-- **Extraction:** Top-level definitions (functions, classes, etc.) with leading comments/decorators
-- **Fallback:** Returns empty list when grammar unavailable, triggering fallback to RegexCodeChunker
-- Grammar configuration: `grammar_config.py` maps languages to tree-sitter modules and target AST node types
-
-In the ingestion pipeline, tree-sitter is tried first for code files. If it returns no chunks (unsupported language or no top-level definitions found), `RegexCodeChunker` is used as fallback.
-
-### RegexCodeChunker (`code_chunker.py`)
-
-- **Strategy:** Language-aware boundary splitting using regex patterns
-- **Max chunk size:** 2000 characters
-- **Overlap:** None (code chunks don't overlap)
-- Small chunks are merged together
-- Falls back to blank-line splitting if no language boundaries are found
-- Used for: all code file types
-
-**Language boundary patterns** (12 languages):
-
-| Language | Boundaries |
-|----------|-----------|
-| Python | `def`, `class`, `async def` |
-| JavaScript/TypeScript | `function`, `const`, `class`, `export`, `interface`, `type` |
-| Java | Access modifiers (`public`, `private`, `protected`) |
-| Go | `func`, `type` |
-| Rust | `fn`, `impl`, `struct`, `enum`, `trait`, `mod` |
-| C/C++ | Function signatures, `class`, `struct`, `namespace` |
-| Ruby | `def`, `class`, `module` |
-| PHP | `function`, `class` |
-| Swift | `func`, `class`, `struct`, `enum`, `protocol` |
-| Kotlin | `fun`, `class`, `object`, `interface`, `data class` |
-
-## Configurable Chunk Sizes
-
-Chunk sizes vary by file type (configurable via Settings):
-
-| File type | Chunk size | Setting |
-|-----------|-----------|---------|
-| PDF | 3000 chars | `chunk_size_pdf` |
-| Code | 2000 chars | `chunk_size_code` |
-| Markdown/text | 2000 chars | `chunk_size_markdown` |
-| Default | 2000 chars | `chunk_size_default` |
-| Overlap (text only) | 200 chars | `chunk_overlap_default` |
+| File stat or checksum failure | Returns `errors=["File read error: ..."]` |
+| File exceeds `max_file_size_mb` | Returns `errors=["File too large ..."]` before parsing |
+| No parser supports the extension | Returns `errors=["No parser for extension: ..."]` |
+| Parser raises | Returns `errors=["Parse error: ..."]` |
+| Vector write fails for a new file | File row survives, `chunk_count` remains `0`, result reports `Vector storage failed` |
+| Vector write fails for a re-ingestion | SQL session rolls back so the old checksum remains authoritative and old vectors stay live |
+| Old-vector deletion fails after successful re-ingestion | New vectors stay live and duplicates may remain until a later cleanup or re-sync |
 
 ## Supported File Types
 
-| Category | Extensions |
-|----------|-----------|
-| Documents | `.pdf`, `.docx`, `.md`, `.markdown`, `.rst`, `.txt` |
-| Python | `.py` |
-| JavaScript/TypeScript | `.js`, `.ts`, `.jsx`, `.tsx` |
-| Systems | `.c`, `.cpp`, `.h`, `.go`, `.rs` |
-| JVM | `.java`, `.kt`, `.scala` |
-| Scripting | `.rb`, `.php`, `.swift`, `.sh`, `.bash` |
-| Data/Config | `.json`, `.yaml`, `.yml`, `.toml`, `.xml`, `.sql` |
-| Web | `.html`, `.css`, `.scss` |
+`SUPPORTED_EXTENSIONS` is built from `CodeParser.EXTENSION_TO_LANGUAGE` plus document extensions.
 
-## Ignored Directories
+Current categories include:
 
-During codebase indexing, these directories are skipped:
+- documents: `.pdf`, `.docx`, `.md`, `.markdown`, `.rst`, `.txt`
+- Python: `.py`
+- JavaScript and TypeScript: `.js`, `.jsx`, `.ts`, `.tsx`
+- systems: `.c`, `.cpp`, `.h`, `.go`, `.rs`
+- JVM and mobile: `.java`, `.kt`, `.scala`, `.swift`
+- scripting: `.rb`, `.php`, `.sh`, `.bash`
+- data and config: `.json`, `.yaml`, `.yml`, `.toml`, `.xml`, `.sql`
+- web: `.html`, `.css`, `.scss`
 
-`node_modules`, `__pycache__`, `.git`, `.venv`, `venv`, `dist`, `build`, `.next`, `.tox`, `.mypy_cache`, `.pytest_cache`, `egg-info`
+## Parser Chain
 
-Additionally:
-- Any directory starting with `.` is skipped
-- Any directory ending with `.egg-info` is skipped (e.g., `mypackage.egg-info`)
+`ParserRegistry.with_defaults()` currently registers parsers in this order:
 
-## Embedding
+1. `PdfParser`
+2. `DocxParser`
+3. `MarkdownParser`
+4. `CodeParser`
 
-- **Default model:** `nomic-ai/nomic-embed-text-v1.5` (via sentence-transformers)
-- **Dimensions:** 768 (configurable; supports Matryoshka truncation for nomic and Qwen models)
-- **Distance metric:** Cosine (normalized)
-- **Task prefixes:** The nomic model requires "search_document: " for indexing and "search_query: " for retrieval. The Embedder handles this transparently via `aembed_texts(texts, mode="document")` and `aembed_single(text)` (always query mode).
-- **Device:** Auto-detected (CUDA if >= 4GB VRAM, MPS if available, else CPU). Override via `EMBEDDING_DEVICE` env var.
-- **Execution:** Local, no external API calls
-- **Legacy support:** `all-MiniLM-L6-v2` (384 dims) is still supported for backward compatibility
-- The `Embedder` class (in `services/ingestion/embedder.py`) is loaded once at startup and stored as a singleton on `app.state`
-- Batch embedding via `aembed_texts()` offloads to a thread pool using `asyncio.get_running_loop().run_in_executor()`
-- Changing the `EMBEDDING_MODEL` env var triggers automatic migration on next startup: all vectors are wiped and projects with source directories are re-indexed
-- `embed_single()` guards against empty model results with an explicit `ValueError`
+That order matters because selection is first-match by extension support.
 
-## Batch Embedding
+## Parsed Output
 
-All chunks from a single file are embedded in one batch call to `embedder.aembed_texts()`. This amortizes model initialization overhead and improves throughput for large files.
+Parsers return `ParsedContent` containing:
 
-## Chunk Deduplication
+- `text`
+- `language`
+- optional `headings`
 
-Each chunk's content is hashed using SHA-256, truncated to 16 characters, and stored as `content_hash` in LanceDB. This enables future deduplication of identical content across different files.
+Current parser behavior:
 
-## Vector Storage
+- `PdfParser`: extracts text via `pymupdf4llm` plus heading metadata via `heading_extractor.py`
+- `DocxParser`: extracts body paragraphs, section headers (labeled `[Header]`), section footers (labeled `[Footer]`), and tables (pipe-delimited rows labeled `[Table N]`). Logs a warning when embedded visual objects (inline shapes) are detected but not extracted. Does not extract heading hierarchy.
+- `MarkdownParser`: extracts text plus heading metadata via `heading_extractor.py`
+- `CodeParser`: reads source text and maps extension to language
 
-Records are stored in LanceDB via the `VectorStore` class (`core/vectordb.py`):
+## Chunking Policy
 
-- Records are dicts with fields: `id`, `vector`, `project_id`, `source_type`, `source_id`, `filename`, `original_path`, `file_type`, `chunk_index`, `chunk_text`, `language`, `tags`, `content_hash`, `section_header`
-- Tags are JSON-encoded strings (e.g., `'["python", "backend"]'`)
-- Vector operations are exposed via `AsyncVectorStore` (dedicated executor, bounded read concurrency, writer-exclusive access)
-- Deletion uses SQL-like filter strings: `vectordb.delete(f"source_id = '{file_id}'")`
+`ChunkingPolicy` decides both chunk size and chunker family.
 
-## Directory Indexing Sandbox
+### Text-like content
 
-Directory indexing is restricted by the `ALLOWED_INDEX_PATHS` setting:
+Text-like files use `SectionAwareTextChunker`.
 
-- The path must resolve to a real directory
-- It must be a subdirectory of at least one allowed path
-- Symlinks that escape the sandbox are rejected
-- If `ALLOWED_INDEX_PATHS` is empty, all directory indexing is rejected
-- Validation logic is in `core/security.py` → `validate_index_path()`
+Current size selection:
 
-## Notes as RAG Sources
+- PDF -> `chunk_size_pdf`
+- markdown/text -> `chunk_size_markdown`
+- everything else text-like -> `chunk_size_default`
 
-Notes use the same pipeline as text files:
+Current overlap:
 
-- Chunked with `TextChunker` (2000-char chunks, 200-char overlap)
-- Embedded and stored in LanceDB with `source_type: "note"`
-- When a note's content is updated, old vectors are deleted and new ones are created
-- Notes appear alongside file chunks in search and chat context retrieval
+- `chunk_overlap_default`
 
-**Re-indexing Error Handling:** When a note's content is updated, the service deletes old vectors before creating new ones. If the vectorization step fails after deletion (due to LanceDB errors, embedding failures, etc.), the service:
+If headings exist, the chunker splits by heading boundaries first and assigns `section_header`. The breadcrumb algorithm maintains a `heading_stack` of `(level, text)` tuples. When each heading is encountered, all entries at equal or deeper levels are popped, and the new heading is pushed. The breadcrumb is formed by joining the remaining stack with ` > ` separators (e.g. `"Architecture > Data Storage > SQLite Tables"`). Text before the first heading gets an empty breadcrumb. Each section is then sub-chunked using the plain `TextChunker`. If headings do not exist, it falls back to plain recursive text chunking.
 
-1. Sets `chunk_count = 0` to reflect that the note has no vectors
-2. Commits the content change (preserving the user's edit)
-3. Logs the failure at CRITICAL level with instructions to retry
-4. Re-raises the exception so the API returns an error
+### Heading extraction formats
 
-This ensures the user's content is never lost, even if vector indexing fails. A subsequent edit to the note will retry the full indexing process. This mirrors the error handling strategy used in file re-ingestion (see "Vector storage fails during re-ingestion" above).
+`heading_extractor.py` supports two heading styles:
 
-## Adding a New Parser
+- ATX markdown headings (`# H1` through `###### H6`)
+- RST underline-style headings (a text line followed by repeated punctuation characters like `=`, `-`, `~`, etc., with levels assigned by first-appearance order of the underline character)
 
-1. Create a new file in `services/ingestion/parsers/`
-2. Extend `FileParser` base class
-3. Implement `supports(ext: str) -> bool` and `parse(file_path: str) -> ParseResult`
-4. Register the parser in `ParserRegistry.with_defaults()` in `services/ingestion/parser_registry.py`
-5. Add the new extensions to `SUPPORTED_EXTENSIONS` in `pipeline.py`
+Results from both extractors are merged and sorted by character offset.
 
-## Background Sync Service
+### Code content
 
-The sync service (`services/sync_service.py`) provides background directory synchronization with progress tracking.
+Code files use `chunk_size_code` with zero overlap.
 
-### How it works
+Current decision path:
 
-`run_sync_job()` is called as a background task (via FastAPI `BackgroundTasks` or `asyncio.create_task()`):
+1. map extension to language
+2. check whether tree-sitter support exists for that language
+3. try `TreeSitterChunker`
+4. if it returns no chunks, fall back to `RegexCodeChunker`
 
-1. Creates its own DB session via `db_module.async_session_factory()` (background tasks can't use request-scoped sessions)
-2. Creates an `IngestionPipeline` and calls `_walk_directory()` to enumerate files
-3. Sets `progress.total_files`, then iterates calling `pipeline.ingest_file()` per file
-4. Updates `JobTracker` progress after each file (processed count, current_file, skipped, errors)
-5. After all files: runs `_cleanup_deleted_files()` to remove DB records + vectors for files no longer on disk
-6. Calls `job_tracker.complete_job()` or `fail_job()` on completion/error
+Important current behavior:
 
-### Deleted file cleanup
+- if tree-sitter loads but finds no top-level definitions, it returns the full file as one chunk
+- regex fallback is mainly for unsupported or unavailable grammars, not for ordinary definition-free files
+- tree-sitter captures leading comments (`comment`, `block_comment`, `line_comment`), decorators (`decorator`, `decorated_definition`), and attributes with the definition node that follows them, so docstrings and decorators are included in the semantic chunk
+- preamble content (imports, module docstrings) is captured as a separate chunk when it precedes the first definition
+- adjacent small definitions below `min_chunk_size` (default 200) are merged into a single chunk via `_merge_small()`
 
-`_cleanup_deleted_files()` queries `File` records where `is_managed=False` and `original_path` starts with the synced directory. Any file not in the `seen_paths` set (files actually found on disk) is deleted from both SQLite and LanceDB.
+## Tree-Sitter Coverage
 
-### Job tracking
+Tree-sitter grammars are currently configured for specific AST node types per language (defined in `grammar_config.py`):
 
-The `JobTracker` (`core/job_tracker.py`) is a SQLite-backed, thread-safe tracker:
+- Python: `function_definition`, `class_definition`, `decorated_definition`
+- JavaScript/JSX: `function_declaration`, `class_declaration`, `method_definition`, `export_statement`, `lexical_declaration`
+- TypeScript/TSX: same as JavaScript plus `interface_declaration`, `type_alias_declaration`, `enum_declaration`
+- Java: `class_declaration`, `method_declaration`, `interface_declaration`, `enum_declaration`, `constructor_declaration`
+- Go: `function_declaration`, `method_declaration`, `type_declaration`
+- Rust: `function_item`, `impl_item`, `struct_item`, `enum_item`, `trait_item`, `mod_item`
+- C: `function_definition`, `struct_specifier`, `enum_specifier`, `type_definition`
+- C++: same as C plus `class_specifier`, `namespace_definition`
+- Ruby: `method`, `class`, `module`, `singleton_method`
+- PHP: `function_definition`, `class_declaration`, `method_declaration`, `interface_declaration`, `trait_declaration`
 
-- `SyncJob` and `SyncJobError` SQLAlchemy models store job state persistently
-- `JobStatus` enum: `pending`, `running`, `completed`, `failed`
-- One active job per project (enforced by `create_job()`, raises `ValueError` if already running)
-- `recover_stale_jobs()` marks crashed jobs as failed on startup
-- Uses a bounded worker queue (`sync_max_concurrent_files`, default 4) to avoid one-task-per-file fanout on large directories
+Language aliases: `jsx` maps to `javascript`, `tsx` uses a distinct grammar from `typescript`.
 
-### Auto-sync on startup
+### Regex code chunker patterns
 
-In `main.py`, the `_auto_sync_projects()` function runs before `yield` in the lifespan:
-- Queries all projects with non-null `source_directory`
-- For each, validates the directory exists on disk (skips with warning if not)
-- Creates a job and launches `sync_service.run_sync_job` via `asyncio.create_task()` (non-blocking)
+`RegexCodeChunker` defines `BOUNDARY_PATTERNS` with language-specific regex patterns for 12 languages. Examples:
 
-## Adding a New Chunker
+- Python: `def `, `class `, `async def `
+- TypeScript: `function `, `const `, `let `, `class `, `export `, `interface `, `type `
+- Go: `func `, `type `
+- Swift: `func `, `class `, `struct `, `enum `, `protocol `
+- Kotlin: `fun `, `class `, `object `, `interface `
 
-1. Create a new file in `services/ingestion/chunkers/`
-2. Extend the base chunker class
-3. Implement `chunk(text: str, metadata: dict) -> list[Chunk]`
-4. Add selection logic in `services/ingestion/chunking_policy.py`
+When no pattern exists for a language, it falls back to splitting on blank lines. Both paths merge small chunks below `min_size=200`.
 
-## Directory Walk Utilities
+Regex-only chunk boundary support additionally includes:
 
-Public directory traversal helpers live in `services/ingestion/directory_walk.py`:
+- Swift
+- Kotlin
 
-- `iter_directory_paths(root, supported_extensions, ignore_dirs)` — generator yielding file paths
-- `next_directory_batch(iterator, batch_size)` — consume the next batch from the iterator
+## Chunk Size Defaults
 
-These are used by the sync service for batched file discovery during background sync jobs. They replace the previous private methods on `IngestionPipeline`.
+Current defaults from `Settings` are:
 
-## Parser Registry
+| Setting | Default |
+|---|---|
+| `chunk_size_default` | `2000` |
+| `chunk_overlap_default` | `200` |
+| `chunk_size_code` | `2000` |
+| `chunk_size_pdf` | `3000` |
+| `chunk_size_markdown` | `2000` |
 
-`services/ingestion/parser_registry.py` provides `ParserRegistry`:
+## Embedding Behavior
 
-- `ParserRegistry.with_defaults()` — creates a registry with the standard parser ordering (PDF, DOCX, Markdown, Code)
-- `select_parser(extension)` — returns the first parser that supports the given extension, or `None`
+The pipeline embeds in document mode through `Embedder.aembed_texts(..., mode="document")`.
 
-This is used by both the ingestion pipeline and the file content preview router to ensure consistent parser selection.
+### Embedding model registry
 
-## Query-Time Transforms
+The `Embedder` class uses a model registry (`EMBEDDING_MODELS`) supporting three model configs, each with distinct query/document prefix strings:
 
-Query-time transformations such as Hypothetical Document Embedding (HyDE) and query decomposition are not part of the ingestion pipeline. They live in `services/query_pipeline.py` and are applied at search and chat retrieval time. See [Architecture: Retrieval and Search](architecture.md) for details.
+| Model | Dimension | Query prefix | Document prefix |
+|---|---|---|---|
+| `nomic-ai/nomic-embed-text-v1.5` | 768 | `"search_query: "` | `"search_document: "` |
+| `Qwen/Qwen3-Embedding-4B` | 2560 | `"Instruct: Retrieve relevant passages\nQuery: "` | (empty) |
+| `all-MiniLM-L6-v2` | 384 | (empty) | (empty) |
+
+Matryoshka dimension truncation is supported: if a non-native dimension is requested and is in `supported_dimensions`, the model's `truncate_dim` is set accordingly.
+
+### Hardware-aware device selection
+
+Device selection uses a preference cascade in `core/hardware.py`: CUDA (only if at least 4 GB VRAM), then MPS (Apple Silicon GPU), then CPU. GPU detection results are cached at module level. `all-MiniLM-L6-v2` forces `device="cpu"` regardless of GPU availability; the other models use the detected device.
+
+### Concurrency and lifecycle
+
+The `Embedder` creates a dedicated `ThreadPoolExecutor` (default 4 workers, prefixed `momodoc-embedder`) with a `threading.Lock`-guarded shutdown flag. All async embedding calls check the shutdown flag before submitting. The `shutdown()` method also cleans up the `loky` reusable executor used by sentence-transformers for parallel tokenization.
+
+Important current behavior:
+
+- batching is capped at 512 chunks per embed/write cycle
+- `section_header` is prepended to the embedded text when present
+- the stored `chunk_text` remains the raw chunk body
+
+## Vector Records
+
+File ingestion writes rows with:
+
+- `id`
+- `vector`
+- `project_id`
+- `source_type="file"`
+- `source_id`
+- `filename`
+- `original_path`
+- `file_type`
+- `chunk_index`
+- `chunk_text`
+- `language`
+- `tags`
+- `content_hash`
+- `section_header`
+
+Notes and issues write into the same table with:
+
+- `source_type="note"` or `source_type="issue"`
+- logical `file_type` values of `note` or `issue`
+- `language="text"`
+
+When nullable string metadata is omitted, `VectorStore.add(...)` normalizes those fields to empty strings before Arrow insert.
+
+## Notes And Issues
+
+### Notes
+
+Notes are indexed with `TextChunker(max_chunk_size=2000, overlap=200)`.
+
+Current behavior:
+
+- tags are split from the note's comma-delimited `tags` string
+- note updates delete old vectors first, then re-index
+- if re-indexing fails, SQLite content still commits and `chunk_count` becomes `0`
+
+### Issues
+
+Issues are indexed as a single chunk:
+
+```text
+title
+
+description
+```
+
+if a description exists, otherwise just the title.
+
+Current behavior:
+
+- issue updates also use delete-then-reindex semantics
+- empty title/description content produces zero chunks
+
+## Directory Ingestion
+
+`ingest_directory(...)` uses:
+
+- lazy directory iteration
+- `index_discovery_batch_size` for batch discovery
+- `index_max_concurrent_files` as a semaphore cap
+
+When the global async session factory exists, each file is ingested inside its own fresh DB session by `_ingest_directory_path(...)`. That isolates failures across files.
+
+## Directory Filtering
+
+Directory traversal also skips any file whose name starts with `.` (dotfiles such as `.env`, `.gitignore`, `.eslintrc.js`). Directory pruning includes both exact name matching against `IGNORE_DIRS` and a suffix match: any directory ending in `.egg-info` is excluded.
+
+The default ignored directories are:
+
+- `node_modules`
+- `__pycache__`
+- `.git`
+- `.venv`
+- `venv`
+- `dist`
+- `build`
+- `.next`
+- `.tox`
+- `.mypy_cache`
+- `.pytest_cache`
+- `egg-info`
+
+The public traversal helpers are:
+
+- `iter_directory_paths(...)`
+- `next_directory_batch(...)`
+
+## Path Safety
+
+Directory indexing is additionally gated by `ALLOWED_INDEX_PATHS` validation in `core/security.py`.
+
+Current rules:
+
+- target must resolve to a real directory
+- target must stay within an allowed root
+- symlink escapes are rejected
+- an empty allowlist blocks directory indexing
+
+## What This Document Does Not Cover
+
+Query-time retrieval, HyDE, decomposition, reranking, and chat prompt assembly are separate from ingestion. Those behaviors live in:
+
+- `backend/app/services/query_pipeline.py`
+- `backend/app/services/search_service.py`
+- `backend/app/services/chat_context.py`

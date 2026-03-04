@@ -16,13 +16,15 @@ Momodoc is a local-first RAG knowledge system with:
 
 ### Backend process
 
-- Entry point: `backend/app/main.py` (thin app factory, ~75 lines)
+- Entry point: `backend/app/main.py`
 - Startup orchestration: `backend/app/bootstrap/` package (`startup.py`, `routes.py`, `exceptions.py`, `watcher.py`)
-- 12 routers registered via `bootstrap/routes.py` under `/api/v1` and `/ws`
-- Middleware stack:
-  - `CORSMiddleware` (allows `"null"` + localhost origins for Electron renderer)
-  - `SessionTokenMiddleware` (validates `X-Momodoc-Token`)
-  - `RequestLoggingMiddleware` (logs method, path, status, duration)
+- Router registration: 13 HTTP routers under `/api/v1` plus one WebSocket endpoint at `/ws`
+- Health endpoint (`GET /api/v1/health`) returns `status`, `service`, and a `ready` flag that is `False` during deferred startup and only becomes `True` after all background tasks (embedder, reranker, FTS, auto-sync, watchers) have finished
+- Token endpoint (`GET /api/v1/token`) restricts access to localhost callers only (`127.0.0.1`, `::1`, `localhost`); returns `403` for any other origin
+- Middleware:
+  - `SessionTokenMiddleware` for session-token auth on API routes; skips `OPTIONS` requests (for CORS preflight); returns `503` before the session token is generated during early startup; uses `hmac.compare_digest()` for constant-time token comparison
+  - `RequestLoggingMiddleware` for request timing/status logging; silently skips `/api/v1/health`, `/static/`, `/_next/`, and `/favicon` paths; logs `METHOD /path STATUS DURATION_MS` at INFO level to the `momodoc.access` logger
+  - `CORSMiddleware` allowing `"null"` and localhost origins for Electron/web development
 
 ### Layered design
 
@@ -34,7 +36,7 @@ Services (business logic)
 Data Layer (SQLAlchemy + LanceDB + LLM)
 ```
 
-**Routers** live in `backend/app/routers/`. There are 12 routers: projects, files, file_content, notes, issues, chat, search, batch, export, llm, metrics, and ws. They validate input via Pydantic schemas, call service functions, and return responses. No business logic belongs in routers.
+**Routers** live in `backend/app/routers/`. Current modules are: projects, directories, files, file_content, batch, notes, issues, chat, search, export, llm, settings, metrics, and ws. They validate input via Pydantic schemas, call service functions, and return responses. Business logic belongs in services rather than routers.
 
 **Services** live in `backend/app/services/`. Each domain has its own service module. The ingestion pipeline has its own sub-package at `services/ingestion/`.
 
@@ -62,9 +64,9 @@ Data Layer (SQLAlchemy + LanceDB + LLM)
 
 - Electron main process: `desktop/src/main/index.ts` (thin) -> `app-runtime.ts`, `window-factory.ts`, `shutdown.ts`
 - Sidecar starts/reuses backend via `desktop/src/main/sidecar.ts`
-- IPC split into domain handlers: `ipc/backend.ts`, `ipc/settings.ts`, `ipc/overlay.ts`, `ipc/window.ts`, `ipc/updater.ts`, `ipc/diagnostics.ts`
-- Renderer components are thin wrappers importing from `frontend/src/shared/renderer/`
-- Shared modules in `desktop/src/shared/` (`app-config.ts`, `desktop-settings.ts`)
+- IPC split into domain handlers: `ipc/backend.ts`, `ipc/settings.ts`, `ipc/overlay.ts`, `ipc/window.ts`, `ipc/updater.ts`, `ipc/diagnostics.ts`, `ipc/shared.ts`
+- Desktop renderer bootstraps in `desktop/src/renderer/`; most reusable UI comes from `frontend/src/shared/renderer/`, while desktop-only flows such as onboarding live in the desktop renderer tree
+- Shared desktop state and config metadata live in `desktop/src/shared/`
 - Overlay chat is a separate always-on-top window using global chat sessions
 
 ### VS Code extension
@@ -83,7 +85,7 @@ Data Layer (SQLAlchemy + LanceDB + LLM)
 ### Shared UI layer
 
 - `frontend/src/shared/renderer/` is the shared source of truth for components, UI primitives, and library code
-- Both the web frontend (`frontend/src/components/`) and the desktop renderer (`desktop/src/renderer/components/`) use thin re-export wrappers that import from the shared layer
+- The web frontend and desktop renderer both consume that shared layer, but each also keeps its own bootstrap/shell components where platform-specific behavior is needed
 - Shared lib includes `apiClientCore.ts` (API client factory), `momodocSse.ts` (SSE parser), `types.ts`, `hooks.ts`
 - Shared CSS tokens in `shared/renderer/app/globals-core.css`
 
@@ -114,15 +116,17 @@ All shared resources are injected via FastAPI `Depends()`. Providers live in `ba
 
 1. Configure logging (`momodoc.log`, `momodoc-startup.log`)
 2. Ensure data/upload/vector dirs exist
-3. Initialize DB engine/session factory (WAL mode, FKs ON, 5s busy timeout)
-4. Run Alembic migrations (`alembic upgrade head`)
-5. Check embedding model consistency (`system_config` table); if model changed, wipe vectors and reset chunk counts for automatic re-indexing
-6. Initialize LanceDB `VectorStore` + `AsyncVectorStore`
-7. Initialize default LLM provider and provider registry
-8. Generate session token (`secrets.token_urlsafe(32)`) and write `session.token` with mode `0600`
-9. Recover stale sync jobs and hydrate active jobs
-10. Initialize WebSocket manager and file watcher
-11. Mark app ready and launch deferred startup task
+3. Load persisted LLM settings from `settings.json`
+4. Initialize DB engine/session factory (WAL mode, FKs ON, 5s busy timeout)
+5. Run Alembic migrations (`alembic upgrade head`)
+6. Initialize WebSocket manager (early, so migration/startup broadcasts can use it)
+7. Check embedding model consistency (`system_config` table); if model changed, wipe vectors and reset chunk counts for automatic re-indexing
+8. Initialize LanceDB `VectorStore` + `AsyncVectorStore`
+9. Initialize default LLM provider and provider registry
+10. Generate session token (`secrets.token_urlsafe(32)`) and write `session.token` with mode `0600`
+11. Recover stale sync jobs and hydrate active jobs
+12. Initialize file watcher (lightweight; no watches started yet)
+13. Populate `app.state`, start accepting requests, and launch deferred startup tasks
 
 ### Deferred startup
 
@@ -155,13 +159,13 @@ All entity IDs are UUID strings. See [Data Model](data-model.md) for full column
 
 ### 5.2 Vector storage (LanceDB)
 
-Single table: `chunks`. Schema fields: `id`, `vector` (768-dim by default), `project_id`, `source_type`, `source_id`, `filename`, `original_path`, `file_type`, `chunk_index`, `chunk_text`, `language`, `tags`, `content_hash`.
+Single table: `chunks`. Schema fields: `id`, `vector` (dimension matches `embedding_dimension`; 768 by default), `project_id`, `source_type`, `source_id`, `filename`, `original_path`, `file_type`, `chunk_index`, `chunk_text`, `language`, `tags`, `content_hash`, `section_header`.
 
 ### 5.3 Data directory
 
 Default: `platformdirs.user_data_dir("momodoc")`
 
-Contains: `db/momodoc.db`, `vectors/`, `uploads/`, `session.token`, `momodoc.pid`, `momodoc.port`, logs.
+Contains backend runtime state such as `db/momodoc.db`, `vectors/`, `uploads/`, `settings.json`, `session.token`, `momodoc.pid`, `momodoc.port`, and backend log files. `settings.json` is managed by `SettingsStore` (`core/settings_store.py`), which persists only LLM-related keys (9-key allowlist: `llm_provider`, API keys, model names) using atomic writes (temp file + `os.replace()`). During startup, persisted settings override environment variables via `object.__setattr__()` on the frozen Pydantic Settings object (precedence: `settings.json` > env vars > defaults).
 
 ## 6. Ingestion Architecture
 
@@ -173,7 +177,9 @@ Chunking: SectionAwareTextChunker for text/markdown/PDF (section-aware splitting
 
 Heading extraction: MarkdownParser and PdfParser extract document heading hierarchy via `heading_extractor.py`. Each chunk carries a `section_header` breadcrumb (e.g. "Architecture > Data Storage"). The section header is prepended to chunk text for embedding (semantic enrichment) but stored separately in LanceDB.
 
-Embedding by `Embedder` (sentence-transformers, `nomic-ai/nomic-embed-text-v1.5` default). Task prefixes are applied transparently: "search_document: " for indexing, "search_query: " for search. Re-ingestion uses add-then-delete for robustness.
+Embedding by `Embedder` (sentence-transformers, `nomic-ai/nomic-embed-text-v1.5` default, with `Qwen/Qwen3-Embedding-4B` and `all-MiniLM-L6-v2` also supported). Task prefixes are applied transparently when the model requires them. File re-ingestion uses add-then-delete for robustness.
+
+Notes and issues are indexed through their service modules rather than `IngestionPipeline`: notes use `TextChunker`, while issues are indexed as a single combined title/description chunk. All three source types land in the same LanceDB table.
 
 ## 7. Retrieval and Search
 
@@ -202,14 +208,16 @@ Before retrieval, the query pipeline classifies and optionally transforms the qu
    - **HyDE**: generates a hypothetical answer passage via LLM, embeds both query and passage, averages and L2-normalizes vectors, then runs vector search
    - **Decomposition**: splits multi-part query into 2-4 sub-questions via LLM, runs parallel hybrid searches, merges results using Reciprocal Rank Fusion (RRF, k=60)
 
-LLM availability is resolved by `query_llm_resolver.resolve_query_llm()` which checks configured providers with a 60-second TTL cache. The resolver tries the default provider first, falls back to other configured providers, and as a last resort pings Ollama with a 2-second HTTP health check.
+If a query is classified as `KEYWORD_LOOKUP` and the caller requested `hybrid`, `search_service` narrows the effective mode to `keyword`. Explicit `vector` or `keyword` requests still win.
+
+LLM availability is resolved by `query_llm_resolver.resolve_query_llm()` which uses a 60-second TTL cache, tries the configured default provider first (except Ollama), then other configured providers, and finally Ollama behind a 2-second health check.
 
 ### Two-stage retrieve-and-rerank
 
 When `reranker_enabled` is True (default) and the reranker has finished loading:
 1. Retrieval fetches `retrieval_candidate_k` (default 50) candidates via the appropriate search path (normal, HyDE, or decomposed).
 2. A cross-encoder reranker (`Reranker` service) scores each query-document pair.
-3. The top `reranker_top_k` (default 10) results are returned with normalized cross-encoder scores.
+3. The top requested `top_k` results are returned with normalized cross-encoder scores.
 4. Keyword-only mode bypasses the reranker entirely.
 
 When the reranker is disabled or not yet loaded, the pipeline falls back to single-stage retrieval with the original score normalization.
@@ -229,15 +237,17 @@ Score normalization: with reranker, scores are sigmoid-normalized cross-encoder 
 1. Persist user message
 2. Classify query and plan retrieval strategy (HyDE, decomposition, or standard; see Section 7)
 3. Retrieve context via the chosen search path + optional pinned sources; cross-encoder reranking when available
-4. Apply per-source diversity cap (max 3 chunks per source_id) to prevent single-document flooding
-5. Select context sources within token budget (tiktoken-based estimation)
-6. Build prompt with system instruction + history + context blocks (source labels include section_header breadcrumbs when available)
-7. Call selected LLM provider (`llm_mode` override supported)
-8. Persist assistant response and ordered `message_sources`; return `retrieval_metadata` in response
+4. Remove duplicate retrieval hits that are already covered by pinned sources
+5. Apply per-source diversity cap (max 3 chunks per source_id) to prevent single-document flooding
+6. Select context sources within token budget. Budget is computed as `context_window - reserve_for_completion - safety_margin` where completion reserve is `min(4096, max(1024, window // 5))` and safety margin is `max(512, window // 20)`. The context window is inferred per model via a curated `ModelInfo` registry in `llm/models.py` with heuristic fallback (e.g. "claude" -> 200K, "gemini" -> 1M, default -> 8192). Token counting uses tiktoken `cl100k_base` encoding for all providers (accurate for Claude/GPT-4, approximate for others), lazy-loaded with thread-safe double-checked locking via `services/tokenizer.py`.
+7. Build prompt with system instruction + history + context blocks (source labels include section_header breadcrumbs when available)
+8. Call selected LLM provider (`llm_mode` override supported)
+9. Persist assistant response and ordered `message_sources`; return `retrieval_metadata` in response
 
 ### Streaming (SSE)
 
-SSE endpoint emits: `event: sources`, token `data` events, `event: done`, `event: error`.
+SSE endpoint emits: `event: sources`, `event: retrieval_metadata`, token `data` events, `event: done`, `event: error`.
+`retrieval_metadata` currently includes `query_plan`, `candidates_fetched`, `reranked`, and `retrieval_ms`.
 
 ### LLM abstraction
 
@@ -245,13 +255,13 @@ SSE endpoint emits: `event: sources`, token `data` events, `event: done`, `event
 |------|-------|-------|
 | `llm/base.py` | `LLMProvider` | Abstract base with `complete()`, `stream()`, `get_model_name()` |
 | `llm/claude.py` | `ClaudeProvider` | Anthropic SDK |
-| `llm/openai_provider.py` | `OpenAIProvider` | Extends `OpenAICompatibleBase` |
+| `llm/openai_provider.py` | `OpenAIProvider` | Extends `OpenAICompatibleProviderBase` |
 | `llm/gemini_provider.py` | `GeminiProvider` | Google Generative AI SDK |
-| `llm/ollama_provider.py` | `OllamaProvider` | Extends `OpenAICompatibleBase` with Ollama defaults |
-| `llm/openai_compatible_base.py` | `OpenAICompatibleBase` | Shared base for OpenAI-compatible providers |
+| `llm/ollama_provider.py` | `OllamaProvider` | Extends `OpenAICompatibleProviderBase` with Ollama defaults |
+| `llm/openai_compatible_base.py` | `OpenAICompatibleProviderBase` | Shared base for OpenAI-compatible providers |
 | `llm/factory.py` | `ProviderRegistry` | Declarative metadata table, `create_llm_provider()`, `available_providers()` |
 
-The `ProviderRegistry` uses a declarative metadata table so adding a provider requires editing only the metadata.
+The `ProviderRegistry` uses a declarative metadata table so adding a provider requires editing only the metadata. Provider instances are lazily cached on first `get()` using a sentinel `_CACHE_MISS` pattern to distinguish "not yet created" from "provider unavailable". The `reload(settings)` method clears the entire cache and replaces the settings reference, enabling hot-swapping LLM providers at runtime without restarting the server (used by `PUT /api/v1/settings`).
 
 ## 9. Sync and File Watching
 
@@ -285,10 +295,11 @@ Custom exceptions in `core/exceptions.py` mapped to HTTP status codes via `boots
 
 ## 11. Async Patterns
 
-- All DB operations use `async with session` and `await`
+- All DB operations use `async with session` and `await`; session factory uses `expire_on_commit=False` so ORM objects remain usable after commit
 - CPU-bound work (file parsing, checksums, embedding) offloaded via `asyncio.to_thread()`
-- `Embedder` uses an instance-owned `ThreadPoolExecutor`
-- `AsyncVectorStore` wraps synchronous `VectorStore` with a dedicated executor, bounded read concurrency, and writer-exclusive coordination
+- `Embedder` uses an instance-owned `ThreadPoolExecutor` with a `threading.Lock`-guarded shutdown flag; also cleans up the `loky` reusable executor (used by sentence-transformers for parallel tokenization)
+- `AsyncVectorStore` wraps synchronous `VectorStore` with a dedicated executor, bounded read concurrency (default 8 via `asyncio.Semaphore`), and a writer-preferring read/write lock (readers block when `_waiting_writers > 0`)
+- Database connection pool: `pool_size=5`, `max_overflow=10`, `pool_timeout=30s`, `pool_recycle=3600s`, `pool_pre_ping=True`
 
 ## 12. Key Files
 
@@ -308,7 +319,7 @@ Custom exceptions in `core/exceptions.py` mapped to HTTP status codes via `boots
 | `core/vectordb.py` | Synchronous `VectorStore` |
 | `core/exceptions.py` | Custom exceptions |
 | `core/job_tracker.py` | Persistent sync job tracker |
-| `core/ws_manager.py` | WebSocket broadcast manager |
+| `core/ws_manager.py` | WebSocket broadcast manager; fire-and-forget fan-out via `asyncio.create_task()` per connection with 5-second send timeout; slow/dead clients are auto-pruned |
 | `core/file_watcher.py` | `ProjectFileWatcher` |
 | `core/security.py` | `validate_index_path()` |
 | `core/rate_limiter.py` | `ChatRateLimiter` |

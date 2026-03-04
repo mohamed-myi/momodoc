@@ -1,95 +1,154 @@
 # LLM Abstraction Layer
 
+Last verified against source on 2026-03-04.
+
 ## Design Goal
 
-Support multiple LLM providers (Claude, OpenAI, Gemini, Ollama) with per-request switching, without scattering provider-specific code across the codebase. Chat is the only feature that requires an LLM; everything else (ingestion, search, sync, metrics) works without any API key.
+The codebase needs to support multiple chat providers without scattering provider-specific logic through routers and services.
 
-## Provider-Agnostic Interface
+Current supported providers:
 
-The base abstraction (`LLMProvider`) defines three methods:
+- Claude
+- OpenAI
+- Gemini
+- Ollama
 
-```python
-class LLMProvider(ABC):
-    async def complete(self, messages, system_prompt=None) -> str
-    async def stream(self, messages, system_prompt=None) -> AsyncIterator[str]
-    def get_model_name(self) -> str
-```
+Only chat and a few query-time transformations require an LLM. Indexing, search, sync, diagnostics, and most of the product remain usable without one.
 
-Every provider implements this interface. Service code never imports a specific provider class; it receives an `LLMProvider` via dependency injection.
+## Provider Interface
 
-## Four Providers
+The common abstraction is `LLMProvider` in `backend/app/llm/base.py`.
 
-| Provider | SDK | Base Class |
-|----------|-----|------------|
-| Claude | Anthropic SDK | Direct `LLMProvider` implementation |
-| OpenAI | OpenAI SDK | `OpenAICompatibleBase` |
-| Gemini | Google Generative AI SDK | Direct `LLMProvider` implementation |
-| Ollama | OpenAI SDK (compatible API) | `OpenAICompatibleBase` |
+Current interface:
 
-### OpenAI-Compatible Base Class
+- `complete(messages, max_tokens=4096, temperature=0.3) -> LLMResponse`
+- `stream(messages, max_tokens=4096, temperature=0.3) -> AsyncIterator[str]`
+- `get_model_name() -> str`
 
-OpenAI and Ollama share a common base (`OpenAICompatibleBase`) because Ollama exposes an OpenAI-compatible API. This base handles:
-- Message formatting (system prompt as a separate message or merged into user messages)
-- Completion and streaming via the OpenAI SDK
-- Error handling and timeout configuration
+Messages use a lightweight shared type:
 
-`OllamaProvider` overrides only the initialization (different base URL, no API key required) and model default. This eliminates code duplication between two providers that differ only in configuration.
+- `LLMMessage { role, content }`
 
-## Metadata-Driven Factory
+Responses normalize:
 
-The `ProviderRegistry` uses a declarative metadata table rather than switch statements:
+- generated content
+- resolved model name
+- token-usage metadata when the provider exposes it
 
-```python
-_PROVIDER_METADATA = {
-    "claude": ProviderMetadata(
-        name="claude",
-        is_configured=lambda s: bool(s.anthropic_api_key),
-        get_model_name=lambda s: s.claude_model,
-        create_provider=lambda s: ClaudeProvider(s.anthropic_api_key, s.claude_model),
-    ),
-    ...
-}
-```
+## Provider Implementations
 
-Each entry defines: how to check if the provider is configured, how to get its model name, and how to create an instance. Adding a new provider means adding one metadata entry. No switch statements, no if-else chains, no multiple files to modify.
+Current provider modules are:
 
-The registry lazily creates providers and caches them with a `threading.Lock` for thread safety. Providers are created on first use, not at startup, which means misconfigured providers do not prevent the application from starting.
+- `claude.py`
+- `openai_provider.py`
+- `gemini_provider.py`
+- `ollama_provider.py`
 
-## Per-Request Provider Override
+OpenAI and Ollama both use `OpenAICompatibleProviderBase`, which centralizes:
 
-Chat endpoints accept an optional `llm_mode` field (`claude`, `openai`, `gemini`, `ollama`). When present, the dependency resolver (`resolve_llm_provider`) selects that provider instead of the default.
+- message formatting
+- chat completion requests
+- streaming iteration
+- API and connection error mapping
 
-This enables a workflow where the default provider is a fast/cheap model (Gemini Flash, local Ollama) for everyday queries, but a user can switch to a more capable model (Claude) for complex questions without changing any configuration.
+## Registry And Factory
 
-The resolution logic is in the dependency layer, not in the chat service. The service receives an `LLMProvider` and does not know or care which provider it is.
+Provider creation is metadata-driven through `ProviderMetadata` entries in `factory.py`.
 
-## SSE Streaming Architecture
+Each provider declares:
 
-Chat streaming uses Server-Sent Events (SSE) rather than WebSocket for a specific reason: SSE is HTTP (works through proxies, load balancers, and CORS without special configuration) and provides a natural request-response pattern where the client sends a message and receives a streamed response.
+- how to check configuration
+- how to read its selected model from settings
+- how to construct an instance
 
-The streaming flow:
+This keeps provider wiring concentrated in one module instead of spreading switch statements across routers and services.
 
-1. Client sends `POST /chat/sessions/{sid}/messages/stream` with `ChatMessageRequest`
-2. Service retrieves context (hybrid search), builds prompt, persists user message
-3. Service calls `provider.stream()` which yields tokens as an `AsyncIterator[str]`
-4. Router wraps this in a `StreamingResponse` with `text/event-stream` content type
-5. Events are emitted in order: `event: sources` (retrieval results), token data events, `event: done`
+## Lazy Instantiation
 
-Each provider implements streaming differently (Anthropic's `text_stream`, OpenAI's `delta.content`, Google's `generate_content` stream), but the `stream()` interface normalizes all of them to `AsyncIterator[str]`.
+`ProviderRegistry` lazily creates provider instances on first use and caches them behind a lock.
 
-## Sliding-Window Rate Limiter
+That means:
 
-The `ChatRateLimiter` protects against runaway usage with four independent buckets:
+- unused SDK clients are never created
+- startup is not blocked on every provider
+- settings changes can invalidate the cache cleanly
 
-| Bucket | Scope | Purpose |
-|--------|-------|---------|
-| Message (client) | Per-client (hashed token) | Prevents one client from monopolizing chat |
-| Message (global) | All clients | Prevents total message throughput from overwhelming the LLM |
-| Stream (client) | Per-client (hashed token) | Separate limit for streaming (which holds connections longer) |
-| Stream (global) | All clients | Prevents total stream connections from saturating |
+## Runtime Settings Reload
 
-Each bucket uses a sliding window algorithm: requests within the window are counted; when the count exceeds the limit, the request is rejected with a 429 response including a `Retry-After` header indicating when the window resets.
+The settings API hot-reloads provider state.
 
-Stream endpoints get separate (lower) limits because each streaming request holds an HTTP connection for the duration of the LLM generation, which can be 10-30 seconds. Without separate limits, streaming requests would consume the entire message budget.
+Current `PUT /api/v1/settings` behavior:
 
-All limits are configurable via environment variables, including the window duration. The limiter is in-memory (no Redis, no external state), which is appropriate for a single-process, single-user deployment.
+1. persist partial settings into `settings.json`
+2. update the in-memory `Settings` object
+3. call `provider_registry.reload(settings)`
+4. recreate `app.state.llm_provider`
+
+This allows provider and model changes without a backend restart.
+
+## Default Provider Versus Per-Request Override
+
+Chat requests can include `llm_mode` to request a specific provider for that request.
+
+However, there is an important implementation detail in the current router wiring:
+
+- chat endpoints still depend on `get_llm_provider`
+- `get_llm_provider` raises if the configured default provider is unavailable
+
+So per-request override works within a running chat stack, but the chat route still expects the default provider to be resolvable today. This is stricter than the abstract design suggests.
+
+## Query-Time LLM Resolution
+
+HyDE and query decomposition do not directly use the default chat provider.
+
+`query_llm_resolver.py` resolves a best available provider with this order:
+
+1. configured default provider, unless it is Ollama
+2. any other configured cloud provider
+3. Ollama, but only if a fast health check succeeds
+
+The result is cached for 60 seconds.
+
+This allows query-time enhancements to degrade gracefully when the preferred chat provider is not suitable or available.
+
+## Provider Discovery
+
+The backend also exposes provider metadata through:
+
+- `GET /api/v1/llm/providers`
+- `GET /api/v1/llm/providers/{provider}/models`
+
+Current behavior:
+
+- provider availability is derived from settings
+- live model lists are fetched from provider APIs when possible
+- curated fallback model lists are used when live discovery fails or credentials are missing
+
+## Streaming Model
+
+Chat streaming is implemented with Server-Sent Events rather than WebSockets.
+
+Current flow:
+
+1. client posts a chat message to `/messages/stream`
+2. retrieval runs first
+3. provider `stream(...)` yields text chunks
+4. the router returns `StreamingResponse(text/event-stream)`
+5. the stream emits source metadata, token chunks, completion, or structured error events
+
+The provider abstraction hides SDK-specific streaming mechanics and normalizes them to plain async text chunks.
+
+## Rate Limiting
+
+The LLM-facing chat routes are guarded by `ChatRateLimiter`.
+
+Current buckets:
+
+- per-client message limit
+- global message limit
+- per-client stream limit
+- global stream limit
+
+Client identity is derived from a hash of `X-Momodoc-Token` when present, otherwise the request IP.
+
+The limiter is in-memory, which matches the single-process local deployment model.

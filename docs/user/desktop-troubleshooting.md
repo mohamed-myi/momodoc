@@ -1,121 +1,144 @@
 # Desktop Troubleshooting
 
-Last verified version: `0.1.0` (local dev + packaged backend smoke checks, 2026-02-25)
+Last verified against source on 2026-03-04.
 
-Use this order:
-1. In-app diagnostics
-2. Startup recovery actions
-3. Logs/data folder review
-4. Terminal checks (advanced)
+## Start With Diagnostics
 
-## 1. Use In-App Diagnostics First
+The desktop app exposes self-service diagnostics in:
 
-Open:
 - `Settings -> Diagnostics`
 
-Available tools:
+Current actions there include:
+
 - `Open Logs Folder`
 - `Open Data Folder`
 - `Test Backend Connection`
 - `Restart Backend`
 - `Copy Diagnostic Report`
 
-If startup fails before the main UI loads, the startup error screen also provides:
-- Retry
-- Open Settings
-- Open Logs
-- Open Data Folder
-- Copy Diagnostics
+If the backend fails during launch, the startup recovery screen also offers:
 
-## 2. Common Startup Messages and Fixes
+- `Retry`
+- `Open Settings`
+- `Open Logs`
+- `Open Data Folder`
+- `Copy Diagnostics`
 
-### Backend failed to start (port conflict)
+## Common Startup Failures
 
-Message usually mentions the configured port is already in use.
+### Port conflict
 
-Fix:
-- Open `Settings -> Server` and change the port, or
-- Stop the conflicting local process using that port
-- Retry from the startup screen
+Typical symptom:
 
-### Backend timeout / not ready in time
+- startup message says the backend port is already in use
 
-Fix:
-- Retry once from the startup screen
-- Open diagnostics and confirm backend health
-- Check `sidecar.log` and `momodoc-startup.log`
-- Large migrations or provider misconfiguration can delay startup
+What to do:
 
-### Backend spawn failure
+- change the backend port in settings
+- or stop the conflicting local process
+- retry from the startup screen
 
-Fix:
-- Open logs and diagnostics
-- Reinstall using the packaged installer (ensures bundled backend runtime is present)
-- If this is a dev build, confirm local backend dependencies exist
+### Timeout
 
-### Runtime / migration-style error
+Typical symptom:
 
-Fix:
-- Open diagnostics -> copy report
-- Review logs in data directory
-- Back up the data directory before any cleanup/reset
+- backend did not become ready in time
 
-### Token/auth mismatch message
+What to do:
 
-Fix:
-- Retry (desktop can restart backend and refresh runtime token)
-- If persistent, use Diagnostics -> Restart Backend
-- If still persistent, restart the desktop app
+- retry once
+- open diagnostics
+- inspect `sidecar.log`, `momodoc.log`, and `momodoc-startup.log`
 
-## 3. Where Logs and Data Live
+### Spawn failure
 
-Default data directory (platform-dependent):
+Typical symptom:
+
+- backend could not be launched at all
+
+What to do:
+
+- inspect `sidecar.log`
+- if this is a packaged build, reinstall and verify the packaged app is intact
+- if this is a dev build, make sure `momodoc` is available in the environment when required
+
+### Runtime or migration-style failure
+
+Typical symptom:
+
+- backend starts then reports an error during initialization
+
+What to do:
+
+- copy the diagnostic report
+- inspect backend logs
+- back up the data directory before manual cleanup
+
+### Auth mismatch
+
+Typical symptom:
+
+- startup message mentions token, auth, unauthorized, or forbidden
+
+What to do:
+
+- retry first
+- restart the backend from diagnostics
+- restart the desktop app if the problem persists
+
+## Logs And Runtime Files
+
+Default Momodoc data directory:
+
 - macOS: `~/Library/Application Support/momodoc/`
 - Linux: `~/.local/share/momodoc/`
-- Windows: `%APPDATA%\momodoc\`
+- Windows: `%LOCALAPPDATA%\\momodoc\\`
 
 Useful files:
-- `sidecar.log` (desktop backend launcher / sidecar)
+
 - `momodoc.log`
 - `momodoc-startup.log`
+- `sidecar.log`
+- `updater.log` in packaged desktop builds
 - `session.token`
 - `momodoc.port`
 - `momodoc.pid`
+- `config.json` for Electron-side desktop settings
 
-## 4. Startup Settings That Affect Behavior
+## When The App Starts But Does Not Show A Window
 
-Open `Settings -> Startup & Launch` and verify:
-- Launch profile (Desktop / Overlay / Web / VS Code / Custom)
-- Auto-launch at login
-- Tray icon enabled (required for tray-minimized startup)
+Check desktop startup behavior in `Settings -> App Behavior`.
 
-If the app seems to "start but not show," check:
-- tray icon is enabled
-- launch profile is not set to minimized-to-tray without tray
+Current things that can affect visibility:
 
-## 5. Advanced Terminal Checks (Optional)
+- startup profile
+- tray icon enabled or disabled
+- auto-launch
+- minimized-to-tray behavior
 
-These are for maintainers or advanced users.
+If you expected a window and only the tray icon appears, inspect the selected startup profile first.
+
+## Manual Checks
+
+Advanced users can validate the backend directly:
 
 ```bash
-# backend health (replace port if customized)
 curl -sf http://127.0.0.1:8000/api/v1/health
+```
 
-# view sidecar log (macOS example)
+And inspect recent sidecar logs, for example on macOS:
+
+```bash
 tail -n 200 ~/Library/Application\ Support/momodoc/sidecar.log
 ```
 
-## 6. What to Include in a Support Report
+## What To Include In A Support Report
 
-From the app:
-- `Settings -> Diagnostics -> Copy Diagnostic Report`
+Include:
 
-Attach or paste:
-- redacted diagnostic report
-- exact error message shown in startup screen (if any)
-- app version / OS
+- copied diagnostic report
+- exact error text from the app
+- app version
+- operating system and architecture
+- whether the build is packaged or a local dev run
 - steps to reproduce
-
-## Screenshot Notes
-
-Troubleshooting screenshots (startup states + diagnostics UI) are pending manual capture from the packaged app verification run.
