@@ -76,6 +76,7 @@ interface UpdatesSettingsSectionProps {
   checkingForUpdates: boolean;
   onCheckForUpdates: () => Promise<void>;
   onQuitAndInstall: () => Promise<void>;
+  onDownloadUpdate: () => Promise<void>;
 }
 
 const STARTUP_PROFILE_OPTIONS: Array<{ value: StartupProfilePreset; label: string }> = [
@@ -1283,6 +1284,7 @@ export function UpdatesSettingsSection({
   checkingForUpdates,
   onCheckForUpdates,
   onQuitAndInstall,
+  onDownloadUpdate,
 }: UpdatesSettingsSectionProps) {
   const statusState = updaterStatus?.state ?? "idle";
   const statusMessage = updaterStatus?.message ?? "Updates enabled (stable channel).";
@@ -1332,6 +1334,12 @@ export function UpdatesSettingsSection({
             <Badge variant="default">
               v{updateAvailable} {showDownloadProgress ? "downloading" : "available"}
             </Badge>
+            {!showDownloadProgress && (
+              <Button variant="primary" size="sm" onClick={onDownloadUpdate}>
+                <Download size={13} />
+                Download Update
+              </Button>
+            )}
           </div>
         ) : (
           <Button

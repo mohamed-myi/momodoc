@@ -40,6 +40,7 @@ export function SettingsPanel() {
     copyDiagnosticReport,
     checkForUpdates,
     quitAndInstall,
+    downloadUpdate,
   } = useDesktopSettings();
 
   if (loading || !settings) {
@@ -124,6 +125,7 @@ export function SettingsPanel() {
         checkingForUpdates={checkingForUpdates}
         onCheckForUpdates={checkForUpdates}
         onQuitAndInstall={quitAndInstall}
+        onDownloadUpdate={downloadUpdate}
       />
     </div>
   );

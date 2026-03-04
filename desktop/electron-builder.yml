@@ -1,6 +1,6 @@
 appId: com.momodoc.desktop
 productName: momodoc
-copyright: Copyright © 2024
+copyright: Copyright © 2025
 
 directories:
   buildResources: resources
@@ -29,6 +29,19 @@ mac:
   entitlementsInherit: resources/entitlements.mac.plist
   category: public.app-category.productivity
 
+dmg:
+  background: resources/dmg-background.png
+  window:
+    width: 660
+    height: 400
+  contents:
+    - x: 180
+      y: 200
+    - x: 480
+      y: 200
+      type: link
+      path: /Applications
+
 win:
   target:
     - target: nsis
@@ -36,9 +49,11 @@ win:
   icon: resources/icon.ico
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  perMachine: false
   deleteAppDataOnUninstall: false
+  installerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
 
 publish:
   provider: github

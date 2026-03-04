@@ -102,12 +102,13 @@ describe('useChatStreaming', () => {
     it('should perform search and update messages', async () => {
       const mockSearchResults = [
         {
-          source_type: 'file',
+          source_type: 'file' as const,
           source_id: 'file-1',
           filename: 'test.py',
           original_path: '/test.py',
           chunk_text: 'test code',
           chunk_index: 0,
+          file_type: 'py',
           score: 0.95,
           project_id: 'proj-1',
         },
@@ -170,32 +171,35 @@ describe('useChatStreaming', () => {
     it('should calculate project scores for global search', async () => {
       const mockSearchResults = [
         {
-          source_type: 'file',
+          source_type: 'file' as const,
           source_id: 'file-1',
           filename: 'test.py',
           original_path: '/test.py',
           chunk_text: 'test code',
           chunk_index: 0,
+          file_type: 'py',
           score: 0.95,
           project_id: 'proj-1',
         },
         {
-          source_type: 'file',
+          source_type: 'file' as const,
           source_id: 'file-2',
           filename: 'test2.py',
           original_path: '/test2.py',
           chunk_text: 'test code 2',
           chunk_index: 0,
+          file_type: 'py',
           score: 0.87,
           project_id: 'proj-1',
         },
         {
-          source_type: 'file',
+          source_type: 'file' as const,
           source_id: 'file-3',
           filename: 'test3.py',
           original_path: '/test3.py',
           chunk_text: 'test code 3',
           chunk_index: 0,
+          file_type: 'py',
           score: 0.82,
           project_id: 'proj-2',
         },
@@ -258,7 +262,7 @@ describe('useChatStreaming', () => {
 
     beforeEach(() => {
       mockFetch = vi.fn()
-      global.fetch = mockFetch
+      global.fetch = mockFetch as typeof fetch
     })
 
     it('should ensure session before sending', async () => {
@@ -545,7 +549,7 @@ describe('useChatStreaming', () => {
         body: mockReadableStream,
       })
 
-      global.fetch = mockFetch
+      global.fetch = mockFetch as typeof fetch
 
       const { result } = renderHook(() =>
         useChatStreaming({

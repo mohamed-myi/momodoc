@@ -14,7 +14,7 @@ afterAll(() => server.close())
 if (!global.crypto) {
   global.crypto = {} as Crypto
 }
-global.crypto.randomUUID = () => Math.random().toString(36).substring(7)
+global.crypto.randomUUID = (() => '00000000-0000-0000-0000-000000000000') as typeof crypto.randomUUID
 
 // Mock localStorage
 const localStorageMock = {
@@ -68,7 +68,7 @@ global.window.momodoc = {
       embeddingModel: 'all-MiniLM-L6-v2',
       chunkSizeMarkdown: 1000,
       chunkSizeCode: 1500,
-      chunkOverlap: 200,
+      chunkOverlapDefault: 200,
       autoLaunch: false,
       showInTray: true,
       globalHotkey: 'CommandOrControl+Shift+K',

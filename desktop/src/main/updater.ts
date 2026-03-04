@@ -23,7 +23,7 @@ export class UpdateManager {
     this.mainWindow = mainWindow;
     this.logPath = path.join(app.getPath("userData"), "updater.log");
 
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowPrerelease = false;
     autoUpdater.allowDowngrade = false;
@@ -37,7 +37,7 @@ export class UpdateManager {
     autoUpdater.on("update-available", (info) => {
       this.log(`[updater] Update available: ${info.version}`);
       this.publishStatus(
-        makeUpdaterStatus("available", `Update v${info.version} available. Downloading...`, {
+        makeUpdaterStatus("available", `Update v${info.version} is available.`, {
           version: info.version,
         })
       );
@@ -121,6 +121,10 @@ export class UpdateManager {
       })
     );
     autoUpdater.quitAndInstall();
+  }
+
+  async downloadUpdate(): Promise<void> {
+    await autoUpdater.downloadUpdate();
   }
 
   stop(): void {

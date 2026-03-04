@@ -34,6 +34,7 @@ export interface UseDesktopSettingsResult {
   copyDiagnosticReport: () => Promise<void>;
   checkForUpdates: () => Promise<void>;
   quitAndInstall: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
 }
 
 export function useDesktopSettings(): UseDesktopSettingsResult {
@@ -268,6 +269,10 @@ export function useDesktopSettings(): UseDesktopSettingsResult {
     await window.momodoc?.quitAndInstall();
   };
 
+  const downloadUpdate = async () => {
+    await window.momodoc?.downloadUpdate();
+  };
+
   return {
     settings,
     loading,
@@ -291,5 +296,6 @@ export function useDesktopSettings(): UseDesktopSettingsResult {
     copyDiagnosticReport,
     checkForUpdates,
     quitAndInstall,
+    downloadUpdate,
   };
 }

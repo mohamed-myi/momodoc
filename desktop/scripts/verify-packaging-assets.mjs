@@ -6,6 +6,9 @@ const requiredFiles = [
   path.join(root, "resources", "icon.icns"),
   path.join(root, "resources", "icon.ico"),
   path.join(root, "resources", "tray-icon.png"),
+  path.join(root, "resources", "dmg-background.png"),
+  path.join(root, "resources", "nsis-header.bmp"),
+  path.join(root, "resources", "nsis-sidebar.bmp"),
   path.join(root, "electron-builder.yml"),
 ];
 

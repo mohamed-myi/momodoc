@@ -94,6 +94,7 @@ const momodocApi = {
     ipcRenderer.invoke("get-updater-status"),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke("check-for-updates"),
   quitAndInstall: (): Promise<void> => ipcRenderer.invoke("quit-and-install"),
+  downloadUpdate: (): Promise<void> => ipcRenderer.invoke("download-update"),
 
   // Diagnostics
   getDiagnosticsSnapshot: (): Promise<DiagnosticsSnapshot> =>

@@ -16,7 +16,7 @@ afterEach(() => {
 afterAll(() => server.close())
 
 // Mock crypto.randomUUID (not available in jsdom)
-global.crypto.randomUUID = () => Math.random().toString(36).substring(7)
+global.crypto.randomUUID = (() => '00000000-0000-0000-0000-000000000000') as typeof crypto.randomUUID
 
 // Mock localStorage
 const localStorageMock = {

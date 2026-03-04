@@ -15,6 +15,7 @@
     "package:ci:mac": "npm run stage:backend-runtime && npm run verify:packaging-assets && npm run build && electron-builder --mac zip dmg --arm64 --publish never -c.electronDist=./node_modules/electron/dist -c.mac.identity=null -c.mac.hardenedRuntime=false",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:unit": "vitest run",
     "test:watch": "vitest watch",

@@ -6,6 +6,7 @@ import { makeUpdaterStatus } from "../../shared/updater-status";
 export const UPDATER_IPC_CHANNELS = [
   "get-updater-status",
   "check-for-updates",
+  "download-update",
   "quit-and-install",
 ] as const;
 
@@ -31,6 +32,18 @@ export function registerUpdaterIpcHandlers(deps: IpcDeps): void {
       return;
     }
     await deps.updater.check();
+  });
+
+  ipcMain.handle("download-update", async () => {
+    if (!deps.updater) {
+      const status = makeUpdaterStatus(
+        "unsupported",
+        "Updates are only available in packaged desktop builds."
+      );
+      sendToWindow(deps.mainWindow, "updater-status", status);
+      return;
+    }
+    await deps.updater.downloadUpdate();
   });
 
   ipcMain.handle("quit-and-install", () => {

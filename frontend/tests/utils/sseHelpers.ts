@@ -78,7 +78,7 @@ export function createMockEventSource() {
     const instance = new MockEventSource(url)
     instances.push(instance)
     return instance
-  })
+  }) as any
 
   // Copy static properties
   MockEventSourceConstructor.CONNECTING = MockEventSource.CONNECTING

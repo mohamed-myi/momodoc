@@ -53,6 +53,7 @@ interface MomodocApi {
   getUpdaterStatus(): Promise<UpdaterStatusPayload>;
   checkForUpdates(): Promise<void>;
   quitAndInstall(): Promise<void>;
+  downloadUpdate(): Promise<void>;
 
   // Diagnostics
   getDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot>;

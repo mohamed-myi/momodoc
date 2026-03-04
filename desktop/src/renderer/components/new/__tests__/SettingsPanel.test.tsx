@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../../../../tests/utils/renderUtils'
 import { SettingsPanel } from '../SettingsPanel'
-import { DEFAULT_ONBOARDING_STATE } from '../../../../shared/onboarding'
+import { DEFAULT_APP_CONFIG } from '../../../../shared/app-config'
+
+const { windowBounds: _, ...DEFAULT_SETTINGS } = DEFAULT_APP_CONFIG
 
 // Mock the useDesktopSettings hook
 vi.mock('../settings/useDesktopSettings', () => ({
@@ -41,6 +43,7 @@ describe('SettingsPanel', () => {
       copyDiagnosticReport: vi.fn(),
       checkForUpdates: vi.fn(),
       quitAndInstall: vi.fn(),
+      downloadUpdate: vi.fn(),
     })
 
     const { container } = render(<SettingsPanel />)
@@ -51,34 +54,7 @@ describe('SettingsPanel', () => {
 
   it('renders settings sections when loaded', () => {
     mockUseDesktopSettings.mockReturnValue({
-      settings: {
-        port: 8000,
-        dataDir: '/tmp/momodoc-test',
-        logLevel: 'INFO',
-        llmProvider: 'claude',
-        anthropicApiKey: '',
-        openaiApiKey: '',
-        googleApiKey: '',
-        ollamaBaseUrl: 'http://localhost:11434',
-        embeddingModel: 'all-MiniLM-L6-v2',
-        chunkSizeMarkdown: 1000,
-        chunkSizeCode: 1500,
-        chunkOverlap: 200,
-        autoLaunch: false,
-        showInTray: true,
-        globalHotkey: 'CommandOrControl+Shift+K',
-        startupProfilePreset: 'desktop',
-        startupProfileCustom: {
-          startBackendOnLaunch: true,
-          openMainWindowOnLaunch: true,
-          openOverlayOnLaunch: false,
-          openWebUiOnLaunch: false,
-          openVsCodeOnLaunch: false,
-          startMinimizedToTray: false,
-          restoreLastSession: true,
-        },
-        onboarding: DEFAULT_ONBOARDING_STATE,
-      },
+      settings: { ...DEFAULT_SETTINGS },
       loading: false,
       saving: false,
       restartNeeded: false,
@@ -100,6 +76,7 @@ describe('SettingsPanel', () => {
       copyDiagnosticReport: vi.fn(),
       checkForUpdates: vi.fn(),
       quitAndInstall: vi.fn(),
+      downloadUpdate: vi.fn(),
     })
 
     const { container } = render(<SettingsPanel />)
@@ -114,34 +91,7 @@ describe('SettingsPanel', () => {
     const mockRestartBackend = vi.fn()
 
     mockUseDesktopSettings.mockReturnValue({
-      settings: {
-        port: 8000,
-        dataDir: '/tmp/momodoc-test',
-        logLevel: 'INFO',
-        llmProvider: 'claude',
-        anthropicApiKey: '',
-        openaiApiKey: '',
-        googleApiKey: '',
-        ollamaBaseUrl: 'http://localhost:11434',
-        embeddingModel: 'all-MiniLM-L6-v2',
-        chunkSizeMarkdown: 1000,
-        chunkSizeCode: 1500,
-        chunkOverlap: 200,
-        autoLaunch: false,
-        showInTray: true,
-        globalHotkey: 'CommandOrControl+Shift+K',
-        startupProfilePreset: 'desktop',
-        startupProfileCustom: {
-          startBackendOnLaunch: true,
-          openMainWindowOnLaunch: true,
-          openOverlayOnLaunch: false,
-          openWebUiOnLaunch: false,
-          openVsCodeOnLaunch: false,
-          startMinimizedToTray: false,
-          restoreLastSession: true,
-        },
-        onboarding: DEFAULT_ONBOARDING_STATE,
-      },
+      settings: { ...DEFAULT_SETTINGS },
       loading: false,
       saving: false,
       restartNeeded: true,
@@ -163,6 +113,7 @@ describe('SettingsPanel', () => {
       copyDiagnosticReport: vi.fn(),
       checkForUpdates: vi.fn(),
       quitAndInstall: vi.fn(),
+      downloadUpdate: vi.fn(),
     })
 
     render(<SettingsPanel />)
@@ -175,34 +126,7 @@ describe('SettingsPanel', () => {
     const mockUpdateSettings = vi.fn()
 
     mockUseDesktopSettings.mockReturnValue({
-      settings: {
-        port: 8000,
-        dataDir: '/tmp/momodoc-test',
-        logLevel: 'INFO',
-        llmProvider: 'claude',
-        anthropicApiKey: '',
-        openaiApiKey: '',
-        googleApiKey: '',
-        ollamaBaseUrl: 'http://localhost:11434',
-        embeddingModel: 'all-MiniLM-L6-v2',
-        chunkSizeMarkdown: 1000,
-        chunkSizeCode: 1500,
-        chunkOverlap: 200,
-        autoLaunch: false,
-        showInTray: true,
-        globalHotkey: 'CommandOrControl+Shift+K',
-        startupProfilePreset: 'desktop',
-        startupProfileCustom: {
-          startBackendOnLaunch: true,
-          openMainWindowOnLaunch: true,
-          openOverlayOnLaunch: false,
-          openWebUiOnLaunch: false,
-          openVsCodeOnLaunch: false,
-          startMinimizedToTray: false,
-          restoreLastSession: true,
-        },
-        onboarding: DEFAULT_ONBOARDING_STATE,
-      },
+      settings: { ...DEFAULT_SETTINGS },
       loading: false,
       saving: false,
       restartNeeded: false,
@@ -224,6 +148,7 @@ describe('SettingsPanel', () => {
       copyDiagnosticReport: vi.fn(),
       checkForUpdates: vi.fn(),
       quitAndInstall: vi.fn(),
+      downloadUpdate: vi.fn(),
     })
 
     render(<SettingsPanel />)
