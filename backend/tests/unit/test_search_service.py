@@ -1,7 +1,7 @@
 """Tests for search service edge cases and query pipeline integration."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.core.async_vectordb import AsyncVectorStore
 from app.llm.base import LLMProvider, LLMResponse

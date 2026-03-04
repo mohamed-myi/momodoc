@@ -3,8 +3,6 @@
 from app.llm.models import (
     CLAUDE_MODELS,
     CURATED_MODELS,
-    GEMINI_MODELS,
-    OPENAI_MODELS,
     get_context_window,
 )
 

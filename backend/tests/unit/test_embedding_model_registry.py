@@ -2,11 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services.ingestion.embedder import (
     EMBEDDING_MODELS,
-    EmbeddingModelConfig,
     resolve_model_config,
 )
 

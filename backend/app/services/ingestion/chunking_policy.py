@@ -10,7 +10,7 @@ from typing import Literal
 
 from app.services.ingestion.chunkers.base import TextChunk
 from app.services.ingestion.chunkers.code_chunker import RegexCodeChunker
-from app.services.ingestion.chunkers.text_chunker import SectionAwareTextChunker, TextChunker
+from app.services.ingestion.chunkers.text_chunker import SectionAwareTextChunker
 from app.services.ingestion.chunkers.treesitter_chunker import TreeSitterChunker
 from app.services.ingestion.parsers.base import ParsedContent
 from app.services.ingestion.parsers.code_parser import EXTENSION_TO_LANGUAGE

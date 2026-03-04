@@ -5,6 +5,16 @@ import electron from "vite-plugin-electron";
 import electronRenderer from "vite-plugin-electron-renderer";
 import path from "path";
 
+const sharedDependencyAliases = {
+  "@": path.resolve(__dirname, "src/renderer"),
+  react: path.resolve(__dirname, "node_modules/react"),
+  "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+  "lucide-react": path.resolve(__dirname, "node_modules/lucide-react"),
+  "react-markdown": path.resolve(__dirname, "node_modules/react-markdown"),
+  "rehype-highlight": path.resolve(__dirname, "node_modules/rehype-highlight"),
+  "remark-gfm": path.resolve(__dirname, "node_modules/remark-gfm"),
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -39,9 +49,7 @@ export default defineConfig({
     electronRenderer(),
   ],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src/renderer"),
-    },
+    alias: sharedDependencyAliases,
   },
   root: ".",
   build: {

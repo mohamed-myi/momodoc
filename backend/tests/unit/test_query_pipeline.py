@@ -8,7 +8,6 @@ import pytest
 from app.llm.base import LLMResponse
 from app.services.query_pipeline import (
     MAX_SUB_QUERIES,
-    QueryPlan,
     QueryType,
     _average_and_normalize,
     classify_query,

@@ -1,11 +1,10 @@
 name: Desktop Release
 
 on:
-  workflow_dipatch: {}
-#  push:
-#    tags:
-#      - 'v*.*.*'
-#  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
   test:

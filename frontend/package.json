@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "geist": "^1.7.0",
@@ -40,6 +41,8 @@
     "@vitest/ui": "^4.0.18",
     "jsdom": "^28.1.0",
     "msw": "^2.12.10",
+    "eslint": "^9.23.0",
+    "eslint-config-next": "^16.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"

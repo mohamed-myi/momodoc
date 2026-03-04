@@ -1,7 +1,5 @@
 """Tests for the TokenCounter and estimate_tokens utility."""
 
-import pytest
-
 from app.services.tokenizer import TokenCounter, estimate_tokens
 
 

@@ -98,6 +98,7 @@ class Settings(BaseSettings):
         "env_file": tuple(str(path) for path in _ENV_FILES),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
+        "enable_decoding": False,
     }
 
     @field_validator("allowed_index_paths", mode="before")

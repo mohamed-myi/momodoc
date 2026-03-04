@@ -1,8 +1,5 @@
 """Integration tests for the settings API endpoints."""
 
-from unittest.mock import MagicMock
-
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 

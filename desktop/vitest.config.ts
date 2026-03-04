@@ -2,6 +2,16 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const sharedDependencyAliases = {
+  '@': path.resolve(__dirname, './src/renderer'),
+  react: path.resolve(__dirname, './node_modules/react'),
+  'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
+  'lucide-react': path.resolve(__dirname, './node_modules/lucide-react'),
+  'react-markdown': path.resolve(__dirname, './node_modules/react-markdown'),
+  'rehype-highlight': path.resolve(__dirname, './node_modules/rehype-highlight'),
+  'remark-gfm': path.resolve(__dirname, './node_modules/remark-gfm'),
+}
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -28,8 +38,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src/renderer'),
-    },
+    alias: sharedDependencyAliases,
   },
 })

@@ -1,7 +1,8 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: "default" | "outline" | "success" | "warning" | "error";
+  children?: ReactNode;
 }
 
 const variantStyles: Record<string, string> = {
