@@ -1,0 +1,75 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGradient" cx="50%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#1A1A1A" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+
+    <!-- Letter Gradient -->
+    <linearGradient id="letterGradient" x1="128" y1="75" x2="128" y2="195" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F0F0F0" />
+    </linearGradient>
+
+    <!-- Glass Reflection Gradient -->
+    <linearGradient id="glassReflection" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.15" />
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Noise Texture Filter -->
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+      <feBlend mode="multiply" in="SourceGraphic" />
+    </filter>
+
+    <!-- Letter Shadow Filter -->
+    <filter id="letterShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+      <feOffset dx="0" dy="3" result="offsetblur" />
+      <feFlood flood-color="#000000" flood-opacity="0.25" />
+      <feComposite in2="offsetblur" operator="in" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Container -->
+  <g>
+    <!-- Base Black Background -->
+    <rect width="256" height="256" rx="56.32" fill="#000000" />
+
+    <!-- Subtle Radial Gradient Overlay -->
+    <rect width="256" height="256" rx="56.32" fill="url(#bgGradient)" />
+
+    <!-- Noise Texture (1% opacity) -->
+    <rect width="256" height="256" rx="56.32" fill="#FFFFFF" opacity="0.01" filter="url(#noise)" />
+
+    <!-- Top-Left Light Source Glow -->
+    <ellipse cx="64" cy="64" rx="80" ry="80" fill="url(#glassReflection)" opacity="0.15" />
+  </g>
+
+  <!-- Letter "m" Monogram -->
+  <g filter="url(#letterShadow)">
+    <!-- Main Letter Shape -->
+    <path
+      d="M 70 180 L 70 95 L 85 95 L 85 102 C 90 96 98 92 108 92 C 118 92 126 96 131 103 C 137 96 146 92 157 92 C 177 92 190 105 190 125 L 190 180 L 173 180 L 173 127 C 173 116 166 109 156 109 C 146 109 139 116 139 127 L 139 180 L 122 180 L 122 127 C 122 116 115 109 105 109 C 95 109 87 116 87 127 L 87 180 L 70 180 Z"
+      fill="url(#letterGradient)"
+    />
+
+    <!-- Top Edge Highlight (Premium Effect) -->
+    <path
+      d="M 70 95 L 85 95 L 85 98 C 90 96 98 92 108 92 C 118 92 126 96 131 98 C 137 96 146 92 157 92 C 177 92 190 105 190 115 L 190 118 C 190 108 177 95 157 95 C 146 95 137 99 131 106 C 126 99 118 95 108 95 C 98 95 90 99 85 105 L 85 95 L 70 95 Z"
+      fill="#FFFFFF"
+      opacity="0.12"
+    />
+  </g>
+
+  <!-- Glass Reflection Overlay -->
+  <rect width="256" height="120" rx="56.32" fill="url(#glassReflection)" opacity="0.08" />
+</svg>

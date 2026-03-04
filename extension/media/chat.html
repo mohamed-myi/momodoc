@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}' {{cspSource}};"
+    />
+    <link rel="stylesheet" href="{{chatCssHref}}" />
+</head>
+<body>
+    <div class="container">
+        <!-- Toolbar: project & session selectors + model -->
+        <div class="toolbar">
+            <select id="projectSelect" title="Select project">
+                <option value="">Select project...</option>
+            </select>
+            <select id="sessionSelect" title="Select session">
+                <option value="">Momodoc</option>
+            </select>
+            <select id="modelSelect" title="Select AI model">
+                <option value="">Loading...</option>
+            </select>
+            <button id="newSessionBtn" title="New chat session">+</button>
+        </div>
+
+        <!-- Error banner -->
+        <div class="error-banner" id="errorBanner"></div>
+
+        <!-- Messages area -->
+        <div class="messages" id="messagesArea">
+            <div class="empty-state" id="emptyState">
+                <p><strong>Talk to Momo</strong></p>
+                <p>Select a project and start chatting with your knowledge base.</p>
+            </div>
+        </div>
+
+        <!-- Streaming indicator -->
+        <div class="streaming-indicator" id="streamingIndicator">Thinking...</div>
+
+        <!-- Input area -->
+        <div class="input-area">
+            <textarea
+                id="messageInput"
+                placeholder="Ask a question..."
+                rows="1"
+            ></textarea>
+            <button id="sendBtn" title="Send message">Send</button>
+        </div>
+    </div>
+
+    <script nonce="{{nonce}}" src="{{chatJsSrc}}"></script>
+</body>
+</html>

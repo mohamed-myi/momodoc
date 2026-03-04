@@ -1,0 +1,46 @@
+appId: com.momodoc.desktop
+productName: momodoc
+copyright: Copyright © 2024
+
+directories:
+  buildResources: resources
+  output: release
+
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - "!node_modules/**/*"
+
+extraResources:
+  - from: .backend-runtime-staging
+    to: backend-runtime
+
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
+  icon: resources/icon.icns
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  category: public.app-category.productivity
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: mohamedibrahim
+  repo: momodoc

@@ -1,0 +1,98 @@
+[project]
+name = "momodoc"
+version = "0.1.0"
+description = "Personal RAG-based knowledge management tool"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.35",
+    "aiosqlite>=0.20.0",
+    "alembic>=1.14.0",
+
+    # Vector DB
+    "lancedb>=0.15.0",
+    "pyarrow>=14.0.0",
+
+    # Embeddings
+    "sentence-transformers>=3.3.0",
+
+    # Tokenization
+    "tiktoken>=0.7.0",
+
+    # LLM
+    "anthropic>=0.39.0",
+    "openai>=1.0.0",
+    "google-genai>=1.0.0",
+
+    # File parsing
+    "pymupdf4llm>=0.0.17",
+    "python-docx>=1.1.2",
+
+    # Code chunking (tree-sitter)
+    "tree-sitter>=0.23.0",
+    "tree-sitter-python>=0.23.0",
+    "tree-sitter-javascript>=0.23.0",
+    "tree-sitter-typescript>=0.23.0",
+    "tree-sitter-java>=0.23.0",
+    "tree-sitter-go>=0.23.0",
+    "tree-sitter-rust>=0.23.0",
+    "tree-sitter-c>=0.23.0",
+    "tree-sitter-cpp>=0.23.0",
+    "tree-sitter-ruby>=0.23.0",
+    "tree-sitter-php>=0.23.0",
+
+    # File watching
+    "watchdog>=4.0.0",
+
+    # CLI
+    "typer>=0.14.0",
+    "rich>=13.9.0",
+    "httpx>=0.28.0",
+
+    # Config
+    "pydantic-settings>=2.6.0",
+    "platformdirs>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+momodoc = "cli.main:app"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "cli*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-select = ["G"]  # flake8-logging-format: flag f-string/format() in logging calls
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    # Treat deprecations as failures by default.
+    "error::DeprecationWarning",
+
+    # Known upstream warnings on Python 3.14+ (external deps).
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+    "ignore:'_UnionGenericAlias' is deprecated and slated for removal in Python 3.17:DeprecationWarning",
+]

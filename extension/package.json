@@ -1,0 +1,102 @@
+{
+  "name": "momodoc",
+  "displayName": "Momodoc",
+  "description": "Personal RAG knowledge management tool",
+  "version": "0.1.0",
+  "publisher": "momodoc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohamedibrahim/momodoc"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "momodoc",
+          "title": "Momodoc",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "momodoc": [
+        {
+          "type": "webview",
+          "id": "momodoc.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "momodoc.startServer",
+        "title": "Momodoc: Start Server"
+      },
+      {
+        "command": "momodoc.stopServer",
+        "title": "Momodoc: Stop Server"
+      },
+      {
+        "command": "momodoc.openUI",
+        "title": "Momodoc: Open Web UI"
+      },
+      {
+        "command": "momodoc.ingestFile",
+        "title": "Momodoc: Ingest File"
+      },
+      {
+        "command": "momodoc.openSettings",
+        "title": "Momodoc: Open LLM Settings"
+      }
+    ],
+    "configuration": {
+      "title": "Momodoc",
+      "properties": {
+        "momodoc.defaultLlmMode": {
+          "type": "string",
+          "default": "gemini",
+          "enum": ["gemini", "claude", "openai", "ollama"],
+          "enumDescriptions": [
+            "Google Gemini",
+            "Anthropic Claude",
+            "OpenAI",
+            "Ollama (local LLM)"
+          ],
+          "description": "Default LLM provider for chat"
+        }
+      }
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "momodoc.ingestFile",
+          "group": "momodoc@1",
+          "when": "resourceScheme == file"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test \"out/**/*.test.js\"",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  }
+}

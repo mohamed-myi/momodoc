@@ -1,0 +1,162 @@
+@theme {
+  /* ---- Background layers (darkest → lightest) ---- */
+  --color-bg-primary: #09090b;
+  --color-bg-secondary: #0f0f12;
+  --color-bg-elevated: #18181b;
+  --color-bg-input: #1e1e22;
+  --color-bg-tertiary: #27272a;
+
+  /* ---- Foreground ---- */
+  --color-fg-primary: #fafafa;
+  --color-fg-secondary: #71717a;
+  --color-fg-tertiary: #52525b;
+  --color-fg-muted: #3f3f46;
+
+  /* ---- Semantic (used sparingly, only for status meaning) ---- */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* ---- Borders ---- */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* ---- Interactive states ---- */
+  --color-hover: rgba(255, 255, 255, 0.04);
+  --color-active: rgba(255, 255, 255, 0.07);
+  --color-focus-ring: rgba(255, 255, 255, 0.25);
+
+  /* ---- Elevation shadows ---- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 16px 48px rgba(0, 0, 0, 0.8), 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* ---- Typography ---- */
+  --text-display: 36px;
+  --text-h1: 24px;
+  --text-h2: 20px;
+  --text-h3: 16px;
+  --text-body: 14px;
+  --text-small: 13px;
+  --text-xs: 11px;
+
+  /* ---- Radii (tight, not bubbly) ---- */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-default: 5px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 255, 255, 0.015), transparent);
+  color: var(--color-fg-primary);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  letter-spacing: -0.014em;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-fg-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-tertiary);
+}
+
+/* ---- Code highlighting ---- */
+.hljs {
+  background: var(--color-bg-tertiary) !important;
+  color: var(--color-fg-primary) !important;
+  padding: 1em !important;
+  border-radius: var(--radius-default);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- Animations ---- */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Responsive container utilities ---- */
+.container-dashboard {
+  width: clamp(300px, 95vw, 1200px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.container-content {
+  width: clamp(300px, 95vw, 1400px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.container-chat {
+  width: clamp(300px, 95vw, 1200px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 640px) {
+  .container-dashboard { width: clamp(300px, 90vw, 1200px); }
+  .container-content { width: clamp(300px, 90vw, 1400px); }
+  .container-chat { width: clamp(300px, 90vw, 1200px); }
+}
+
+@media (min-width: 1024px) {
+  .container-dashboard { width: clamp(300px, 85vw, 1200px); }
+  .container-content { width: clamp(300px, 85vw, 1400px); }
+  .container-chat { width: clamp(300px, 85vw, 1200px); }
+}
+
+@media (min-width: 1536px) {
+  .container-dashboard { width: clamp(300px, 80vw, 1300px); }
+  .container-content { width: clamp(300px, 80vw, 1500px); }
+  .container-chat { width: clamp(300px, 80vw, 1300px); }
+}
+
+@media (min-width: 1920px) {
+  .container-dashboard { width: clamp(300px, 75vw, 1400px); }
+  .container-content { width: clamp(300px, 75vw, 1600px); }
+  .container-chat { width: clamp(300px, 75vw, 1400px); }
+}
