@@ -237,11 +237,15 @@ export const handlers = [
 
   // Search
   http.post(`${baseUrl}/api/v1/search`, () => {
-    return HttpResponse.json([])
+    return HttpResponse.json({ results: [] })
+  }),
+
+  http.post(`${baseUrl}/api/v1/projects/:projectId/search`, () => {
+    return HttpResponse.json({ results: [] })
   }),
 
   // Sync
-  http.post(`${baseUrl}/api/v1/projects/:projectId/sync`, () => {
+  http.post(`${baseUrl}/api/v1/projects/:projectId/files/sync`, () => {
     return HttpResponse.json({
       id: `job-${Date.now()}`,
       project_id: 'proj-1',
@@ -261,7 +265,11 @@ export const handlers = [
     }, { status: 201 })
   }),
 
-  http.get(`${baseUrl}/api/v1/sync/jobs/:jobId`, () => {
+  http.get(`${baseUrl}/api/v1/projects/:projectId/files/sync/status`, () => {
+    return HttpResponse.json(null)
+  }),
+
+  http.get(`${baseUrl}/api/v1/projects/:projectId/files/jobs/:jobId`, () => {
     return HttpResponse.json({
       id: 'job-1',
       project_id: 'proj-1',
@@ -290,7 +298,7 @@ export const handlers = [
   }),
 
   // Directory browsing
-  http.get(`${baseUrl}/api/v1/browse`, () => {
+  http.get(`${baseUrl}/api/v1/directories/browse`, () => {
     return HttpResponse.json({
       current_path: '/home/user',
       parent_path: '/home',

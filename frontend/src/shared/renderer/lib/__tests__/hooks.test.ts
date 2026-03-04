@@ -1,15 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { useDebounce, useInfiniteScroll } from '../hooks'
 
 describe('hooks', () => {
   describe('useDebounce', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
     it('returns initial value immediately', () => {
       const { result } = renderHook(() => useDebounce('initial', 500))
       expect(result.current).toBe('initial')
     })
 
-    it('debounces value changes with real timers', async () => {
+    it('debounces value changes', () => {
+      vi.useFakeTimers()
+
       const { result, rerender } = renderHook(
         ({ value, delay }) => useDebounce(value, delay),
         { initialProps: { value: 'initial', delay: 100 } }
@@ -24,13 +30,22 @@ describe('hooks', () => {
       // Should still be initial immediately after update
       expect(result.current).toBe('initial')
 
-      // Wait for debounce to complete
-      await waitFor(() => {
-        expect(result.current).toBe('updated')
-      }, { timeout: 200 })
+      act(() => {
+        vi.advanceTimersByTime(99)
+      })
+
+      expect(result.current).toBe('initial')
+
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+
+      expect(result.current).toBe('updated')
     })
 
-    it('works with different types', async () => {
+    it('works with different types', () => {
+      vi.useFakeTimers()
+
       const { result, rerender } = renderHook(
         ({ value, delay }) => useDebounce(value, delay),
         { initialProps: { value: 42, delay: 100 } }
@@ -40,9 +55,11 @@ describe('hooks', () => {
 
       rerender({ value: 100, delay: 100 })
 
-      await waitFor(() => {
-        expect(result.current).toBe(100)
-      }, { timeout: 200 })
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+
+      expect(result.current).toBe(100)
     })
   })
 

@@ -62,7 +62,7 @@ export function createRendererApiClient(bootstrap: RendererApiBootstrap) {
       bootstrap.getToken(),
     ]);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file, file.name);
 
     const response = await fetch(`${baseUrl}/api/v1/projects/${projectId}/files/upload`, {
       method: "POST",
@@ -203,10 +203,10 @@ export function createRendererApiClient(bootstrap: RendererApiBootstrap) {
       const path = projectId
         ? `/api/v1/projects/${projectId}/search`
         : "/api/v1/search";
-      return request<SearchResponse>(path, {
+      return request<SearchResponse | SearchResult[]>(path, {
         method: "POST",
         body: JSON.stringify({ query }),
-      }).then((resp) => resp.results);
+      }).then((resp) => (Array.isArray(resp) ? resp : resp.results));
     },
 
     // LLM Providers and Settings

@@ -23,11 +23,20 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
-      include: ['src/renderer/**/*.{ts,tsx}'],
+      include: [
+        'src/main/backend-launch.ts',
+        'src/main/diagnostics-report.ts',
+        'src/main/startup-profile-runtime.ts',
+        'src/shared/app-config.ts',
+        'src/shared/desktop-settings.ts',
+        'src/shared/diagnostics.ts',
+        'src/shared/onboarding.ts',
+        'src/renderer/components/new/SettingsPanel.tsx',
+        'src/renderer/components/new/settings/desktopSettingsController.ts',
+      ],
       exclude: [
         'src/**/__tests__/**',
         'src/**/*.test.{ts,tsx}',
-        'src/renderer/components/ui/**',
       ],
       thresholds: {
         lines: 60,

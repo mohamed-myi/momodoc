@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, CheckCircle, Circle, X, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Issue } from "@/lib/types";
@@ -27,7 +27,7 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
 
-  const fetchIssues = async () => {
+  const fetchIssues = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -38,11 +38,11 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchIssues();
-  }, [projectId]);
+    void fetchIssues();
+  }, [fetchIssues]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +106,7 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
         <Button
           variant={creating ? "ghost" : "secondary"}
           size="sm"
+          title={creating ? "Cancel issue" : "New issue"}
           onClick={() => setCreating(!creating)}
         >
           {creating ? (
@@ -159,6 +160,7 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
+                title="Cancel issue"
                 onClick={() => setCreating(false)}
               >
                 cancel
@@ -167,6 +169,7 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
                 type="submit"
                 variant="primary"
                 size="sm"
+                title="Save issue"
                 disabled={saving || !newTitle.trim()}
               >
                 {saving ? "creating..." : "create"}
@@ -183,7 +186,7 @@ export function IssuesSection({ projectId }: IssuesSectionProps) {
       ) : issues.length === 0 ? (
         <EmptyState
           icon={CheckCircle}
-          title="no issues"
+          title="no issues yet"
           description="Track tasks, bugs, and follow-ups you want Momodoc to keep visible while you work."
           action={{ label: "add issue", onClick: () => setCreating(true) }}
         />
@@ -300,6 +303,8 @@ function IssueRow({
       </span>
       <button
         onClick={() => onDelete(issue.id)}
+        aria-label={`Delete issue ${issue.title}`}
+        title="Delete issue"
         className={`p-1 rounded-[var(--radius-xs)] text-fg-muted hover:text-error transition-all duration-100 shrink-0 ${
           hoveredId === issue.id ? "opacity-100" : "opacity-0"
         }`}

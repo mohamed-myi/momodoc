@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   FileText,
@@ -53,7 +53,7 @@ export function ProjectView({ projectId, onBack }: ProjectViewProps) {
     });
   };
 
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -64,11 +64,11 @@ export function ProjectView({ projectId, onBack }: ProjectViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchProject();
-  }, [projectId]);
+    void fetchProject();
+  }, [fetchProject]);
 
   if (loading) return <LoadingPage />;
   if (error || !project)

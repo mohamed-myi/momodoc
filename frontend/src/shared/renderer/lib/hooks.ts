@@ -25,7 +25,10 @@ export function useInfiniteScroll(
 ) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef(loadMore);
-  loadMoreRef.current = loadMore;
+
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
 
   const observe = useCallback(() => {
     const sentinel = sentinelRef.current;

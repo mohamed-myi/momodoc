@@ -242,7 +242,7 @@ describe('IssuesSection', () => {
     expect(screen.queryByText('Update README')).not.toBeInTheDocument()
 
     // Click to show done issues
-    const toggleButton = screen.getByText(/done/i)
+    const toggleButton = screen.getByText(/completed/i)
     await user.click(toggleButton)
 
     await waitFor(() => {
@@ -307,8 +307,7 @@ describe('IssuesSection', () => {
     render(<IssuesSection projectId="proj-1" />)
 
     await waitFor(() => {
-      // Should show count of done issues
-      expect(screen.getByText(/done.*1/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 completed/i)).toBeInTheDocument()
     })
   })
 })

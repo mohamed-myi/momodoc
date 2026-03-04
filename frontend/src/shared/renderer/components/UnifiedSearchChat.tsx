@@ -70,6 +70,10 @@ export function UnifiedSearchChat({
   }, []);
 
   useEffect(() => {
+    localStorage.setItem(SESSION_WIDTH_KEY, String(sessionWidth));
+  }, [sessionWidth]);
+
+  useEffect(() => {
     const handler = (event: MouseEvent) => {
       if (
         modeDropdownOpen &&
@@ -163,7 +167,25 @@ export function UnifiedSearchChat({
     messagesLoadedRef.current(messages);
   }, []);
 
-  const sessionManager = useChatSessionManager({
+  const {
+    sessionId,
+    sessions,
+    loadingSessions,
+    hoveredSessionId,
+    deletingSessionId,
+    renamingSessionId,
+    renameValue,
+    setHoveredSessionId,
+    setRenameValue,
+    loadSession,
+    startNewChat,
+    handleDeleteSession,
+    startRenaming,
+    cancelRenaming,
+    handleRename,
+    ensureSession,
+    handleSessionMouseLeave,
+  } = useChatSessionManager({
     createSessionApi,
     getSessionsApi,
     getMessagesApi,
@@ -175,9 +197,9 @@ export function UnifiedSearchChat({
 
   useEffect(() => {
     if (!requestedSessionId) return;
-    if (sessionManager.sessionId === requestedSessionId) return;
-    void sessionManager.loadSession(requestedSessionId);
-  }, [requestedSessionId, sessionManager.loadSession, sessionManager.sessionId]);
+    if (sessionId === requestedSessionId) return;
+    void loadSession(requestedSessionId);
+  }, [loadSession, requestedSessionId, sessionId]);
 
   const {
     messages,
@@ -193,16 +215,21 @@ export function UnifiedSearchChat({
     onProjectScores,
     includeHistory,
     llmMode,
-    ensureSession: sessionManager.ensureSession,
+    ensureSession,
     getStreamUrl: streamUrl,
   });
 
-  messagesLoadedRef.current = replaceMessages;
-  resetChatRef.current = () => {
-    resetMessages();
-    onProjectScores?.({});
-    textareaRef.current?.focus();
-  };
+  useEffect(() => {
+    messagesLoadedRef.current = replaceMessages;
+  }, [replaceMessages]);
+
+  useEffect(() => {
+    resetChatRef.current = () => {
+      resetMessages();
+      onProjectScores?.({});
+      textareaRef.current?.focus();
+    };
+  }, [onProjectScores, resetMessages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -244,23 +271,23 @@ export function UnifiedSearchChat({
         {llmEnabled && showSessions && (
           <>
             <SessionSidebar
-              sessions={sessionManager.sessions}
-              sessionId={sessionManager.sessionId}
-              loadingSessions={sessionManager.loadingSessions}
-              hoveredSessionId={sessionManager.hoveredSessionId}
-              deletingSessionId={sessionManager.deletingSessionId}
-              renamingSessionId={sessionManager.renamingSessionId}
-              renameValue={sessionManager.renameValue}
-              onStartNewChat={sessionManager.startNewChat}
+              sessions={sessions}
+              sessionId={sessionId}
+              loadingSessions={loadingSessions}
+              hoveredSessionId={hoveredSessionId}
+              deletingSessionId={deletingSessionId}
+              renamingSessionId={renamingSessionId}
+              renameValue={renameValue}
+              onStartNewChat={startNewChat}
               onHideSessions={() => setShowSessions(false)}
-              onLoadSession={sessionManager.loadSession}
-              onSessionMouseEnter={sessionManager.setHoveredSessionId}
-              onSessionMouseLeave={sessionManager.handleSessionMouseLeave}
-              onStartRenaming={sessionManager.startRenaming}
-              onDeleteSession={sessionManager.handleDeleteSession}
-              onRenameValueChange={sessionManager.setRenameValue}
-              onConfirmRename={sessionManager.handleRename}
-              onCancelRenaming={sessionManager.cancelRenaming}
+              onLoadSession={loadSession}
+              onSessionMouseEnter={setHoveredSessionId}
+              onSessionMouseLeave={handleSessionMouseLeave}
+              onStartRenaming={startRenaming}
+              onDeleteSession={handleDeleteSession}
+              onRenameValueChange={setRenameValue}
+              onConfirmRename={handleRename}
+              onCancelRenaming={cancelRenaming}
               width={sessionWidth}
             />
             <ResizeHandle onResize={handleSessionResize} />

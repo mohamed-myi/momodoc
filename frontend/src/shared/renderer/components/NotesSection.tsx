@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, StickyNote, X, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Note } from "@/lib/types";
@@ -26,7 +26,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
   const [editContent, setEditContent] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  const fetchNotes = async () => {
+  const fetchNotes = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -37,11 +37,11 @@ export function NotesSection({ projectId }: NotesSectionProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchNotes();
-  }, [projectId]);
+    void fetchNotes();
+  }, [fetchNotes]);
 
   const handleSave = async () => {
     if (!newContent.trim()) return;
@@ -107,6 +107,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
         <Button
           variant={creating ? "ghost" : "secondary"}
           size="sm"
+          title={creating ? "Cancel note" : "New note"}
           onClick={() => setCreating(!creating)}
         >
           {creating ? (
@@ -142,6 +143,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
             <Button
               variant="ghost"
               size="sm"
+              title="Cancel note"
               onClick={() => {
                 setCreating(false);
                 setNewContent("");
@@ -152,6 +154,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
             <Button
               variant="primary"
               size="sm"
+              title="Save note"
               onClick={handleSave}
               disabled={saving || !newContent.trim()}
             >
@@ -168,7 +171,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
       ) : notes.length === 0 ? (
         <EmptyState
           icon={StickyNote}
-          title="no notes"
+          title="no notes yet"
           description="Capture key context, findings, or reminders so chat can reference them later."
           action={{ label: "add note", onClick: () => setCreating(true) }}
         />
@@ -192,6 +195,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    title="Cancel"
                     onClick={cancelEditing}
                   >
                     cancel
@@ -199,6 +203,7 @@ export function NotesSection({ projectId }: NotesSectionProps) {
                   <Button
                     variant="primary"
                     size="sm"
+                    title="Save"
                     onClick={handleUpdate}
                     disabled={editSaving || !editContent.trim()}
                   >

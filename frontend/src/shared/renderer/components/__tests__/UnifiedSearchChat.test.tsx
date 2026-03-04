@@ -167,11 +167,12 @@ describe('UnifiedSearchChat', () => {
       await user.hover(sessionItem!)
 
       // Click delete button once for confirmation
-      const deleteButtons = screen.getAllByRole('button', { name: /delete/i })
-      await user.click(deleteButtons[0])
+      const deleteButton = screen.getAllByRole('button', { name: /delete/i })[0]
+      await user.click(deleteButton)
 
       // Click again to confirm
-      await user.click(deleteButtons[0])
+      const confirmDeleteButton = screen.getByRole('button', { name: /delete\?/i })
+      await user.click(confirmDeleteButton)
 
       await waitFor(() => {
         expect(screen.queryByText('Test Session 1')).not.toBeInTheDocument()
@@ -186,19 +187,21 @@ describe('UnifiedSearchChat', () => {
 
       // Mock search endpoint
       server.use(
-        http.post('/api/v1/search', () => {
-          return HttpResponse.json([
-            {
-              source_type: 'file',
-              source_id: 'file-1',
-              filename: 'test.py',
-              original_path: '/test.py',
-              chunk_text: 'test code',
-              chunk_index: 0,
-              score: 0.95,
-              project_id: 'proj-1',
-            },
-          ])
+        http.post('/api/v1/projects/proj-1/search', () => {
+          return HttpResponse.json({
+            results: [
+              {
+                source_type: 'file',
+                source_id: 'file-1',
+                filename: 'test.py',
+                original_path: '/test.py',
+                chunk_text: 'test code',
+                chunk_index: 0,
+                score: 0.95,
+                project_id: 'proj-1',
+              },
+            ],
+          })
         })
       )
 
@@ -211,7 +214,7 @@ describe('UnifiedSearchChat', () => {
       await user.click(sendButton)
 
       await waitFor(() => {
-        expect(screen.getByText('Found 1 result')).toBeInTheDocument()
+        expect(screen.getByText('1 result')).toBeInTheDocument()
       })
     })
 

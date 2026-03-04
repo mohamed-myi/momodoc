@@ -4,39 +4,35 @@ End-to-end tests for the momodoc frontend using Playwright.
 
 ## Prerequisites
 
-1. **Backend must be running** - E2E tests interact with a real backend
-2. **Frontend dev server** - Tests run against the Next.js dev server
-3. Playwright installed: `npm install` (already in devDependencies)
+1. **Frontend dev server** - Tests run against the Next.js dev server
+2. Playwright installed: `npm install` (already in devDependencies)
+
+The browser specs use Playwright route mocks for `/api/v1/**` so they can exercise the current UI deterministically without depending on real backend data or LLM configuration.
 
 ## Running Tests
 
 ### Automatic (Recommended)
 
-Playwright config automatically starts both backend and frontend:
+Playwright config automatically starts the frontend dev server:
 
 ```bash
 npm run test:e2e
 ```
 
 This will:
-1. Start backend via `make serve` (localhost:8000)
-2. Start frontend via `npm run dev` (localhost:3000)
-3. Run all E2E tests
-4. Shut down servers after tests complete
+1. Start frontend via `npm run dev` (localhost:3000)
+2. Run all E2E tests
+3. Shut down the dev server after tests complete
 
 ### Manual
 
 If you prefer to run servers manually:
 
 ```bash
-# Terminal 1: Start backend
-cd ../backend
-make serve
-
-# Terminal 2: Start frontend
+# Terminal 1: Start frontend
 npm run dev
 
-# Terminal 3: Run tests
+# Terminal 2: Run tests
 npm run test:e2e
 ```
 
@@ -56,8 +52,8 @@ This opens Playwright's UI mode where you can:
 
 ## Test Structure
 
-- `dashboard.spec.ts` - Dashboard, project CRUD, navigation
-- `search-chat.spec.ts` - Unified search/chat, streaming, sessions
+- `dashboard.spec.ts` - Dashboard loading, empty/error states, project navigation
+- `search-chat.spec.ts` - Unified search/chat mode switching, sessions, streaming states
 
 ## Writing E2E Tests
 
@@ -73,9 +69,9 @@ This opens Playwright's UI mode where you can:
    await expect(page.locator('[data-testid="result"]')).toBeVisible({ timeout: 5000 })
    ```
 
-3. **Handle async operations** (API calls, streaming):
+3. **Wait for user-visible state** instead of `networkidle`:
    ```ts
-   await page.waitForLoadState('networkidle')
+   await expect(page.getByRole('heading', { name: 'momodoc' })).toBeVisible()
    ```
 
 4. **Clean up test data** to avoid test pollution:
@@ -129,30 +125,13 @@ View trace:
 npx playwright show-trace test-results/path/to/trace.zip
 ```
 
-## CI/CD
-
-E2E tests run in GitHub Actions with:
-- Backend started via `make serve`
-- Frontend started via `npm run dev`
-- Headless browser mode
-- 2 retries on failure
-- Artifacts uploaded (screenshots, videos, traces)
-
 ## Troubleshooting
-
-**Tests timeout:**
-- Increase timeout in test: `test.setTimeout(60000)`
-- Or in config: `timeout: 60000`
-
-**Backend not starting:**
-- Check backend health: `curl http://localhost:8000/api/v1/health`
-- Check logs: `tail -f ../backend/momodoc.log`
 
 **Frontend not loading:**
 - Check dev server: `curl http://localhost:3000`
 - Check for port conflicts: `lsof -i :3000`
 
 **Flaky tests:**
-- Use `waitForLoadState('networkidle')` instead of fixed timeouts
-- Add explicit waits for dynamic content
-- Use `test.retry(2)` for known flaky tests
+- Prefer route mocks with explicit fixtures over real backend state
+- Wait for stable UI text, roles, or placeholders instead of fixed timeouts
+- Keep selectors tied to visible controls, not hidden hover affordances unless the test explicitly hovers first

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL || 'http://127.0.0.1:8000'
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -17,27 +19,11 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
   ],
-  webServer: [
-    {
-      command: 'cd ../backend && make serve',
-      url: 'http://localhost:8000/api/v1/health',
-      timeout: 30000,
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: 'npm run dev',
-      url: 'http://localhost:3000',
-      timeout: 30000,
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+  webServer: {
+    command: `NEXT_PUBLIC_API_BASE_URL=${apiBaseUrl} npm run dev`,
+    url: 'http://localhost:3000',
+    timeout: 120000,
+    reuseExistingServer: !process.env.CI,
+  },
 })

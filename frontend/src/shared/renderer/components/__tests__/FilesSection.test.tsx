@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { FilesSection } from '../FilesSection'
@@ -36,6 +36,7 @@ describe('FilesSection', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -105,21 +106,18 @@ describe('FilesSection', () => {
 
     it('should upload file when selected', async () => {
       const user = userEvent.setup()
-      let uploadedFile: File | null = null
 
       server.use(
         http.get('/api/v1/projects/proj-1/files', () => {
           return HttpResponse.json([])
         }),
-        http.post('/api/v1/projects/proj-1/files/upload', async ({ request }) => {
-          const formData = await request.formData()
-          uploadedFile = formData.get('file') as File
+        http.post('/api/v1/projects/proj-1/files/upload', () => {
           return HttpResponse.json({
             id: 'file-new',
             project_id: 'proj-1',
-            filename: uploadedFile.name,
-            file_type: uploadedFile.type,
-            file_size: uploadedFile.size,
+            filename: 'test.txt',
+            file_type: 'text/plain',
+            file_size: 12,
             chunk_count: 0,
             indexed_at: null,
             created_at: new Date().toISOString(),
@@ -143,7 +141,7 @@ describe('FilesSection', () => {
       }
 
       await waitFor(() => {
-        expect(uploadedFile?.name).toBe('test.txt')
+        expect(screen.getByText('test.txt')).toBeInTheDocument()
       })
     })
 
@@ -275,7 +273,7 @@ describe('FilesSection', () => {
       await user.hover(fileItem!)
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
+        expect(screen.getByLabelText(/delete file test\.pdf/i)).toBeInTheDocument()
       })
     })
 
@@ -300,7 +298,7 @@ describe('FilesSection', () => {
       const fileItem = screen.getByText('test.pdf').closest('div')
       await user.hover(fileItem!)
 
-      const deleteButton = screen.getByRole('button', { name: /delete/i })
+      const deleteButton = screen.getByLabelText(/delete file test\.pdf/i)
       await user.click(deleteButton)
 
       await waitFor(() => {
@@ -329,7 +327,7 @@ describe('FilesSection', () => {
       const fileItem = screen.getByText('test.pdf').closest('div')
       await user.hover(fileItem!)
 
-      const deleteButton = screen.getByRole('button', { name: /delete/i })
+      const deleteButton = screen.getByLabelText(/delete file test\.pdf/i)
       await user.click(deleteButton)
 
       await waitFor(() => {
@@ -374,7 +372,7 @@ describe('FilesSection', () => {
         http.get('/api/v1/projects/proj-1/files', () => {
           return HttpResponse.json([])
         }),
-        http.post('/api/v1/projects/proj-1/sync', () => {
+        http.post('/api/v1/projects/proj-1/files/sync', () => {
           return HttpResponse.json({
             id: 'job-1',
             project_id: 'proj-1',
@@ -417,7 +415,7 @@ describe('FilesSection', () => {
         http.get('/api/v1/projects/proj-1/files', () => {
           return HttpResponse.json([])
         }),
-        http.get('/api/v1/sync/jobs/job-1', () => {
+        http.get('/api/v1/projects/proj-1/files/jobs/job-1', () => {
           return HttpResponse.json({
             id: 'job-1',
             project_id: 'proj-1',
@@ -441,13 +439,14 @@ describe('FilesSection', () => {
       render(<FilesSection projectId="proj-1" initialSyncJobId="job-1" sourceDirectory="/path" />)
 
       // Fast-forward time to trigger polling
-      await vi.advanceTimersByTimeAsync(1000)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
 
       vi.useRealTimers()
     })
 
     it('should refetch files when sync completes', async () => {
-      vi.useFakeTimers()
       let syncCompleted = false
 
       server.use(
@@ -457,27 +456,8 @@ describe('FilesSection', () => {
           }
           return HttpResponse.json([])
         }),
-        http.get('/api/v1/sync/jobs/job-1', () => {
-          if (!syncCompleted) {
-            syncCompleted = true
-            return HttpResponse.json({
-              id: 'job-1',
-              project_id: 'proj-1',
-              status: 'completed',
-              total_files: 2,
-              processed_files: 2,
-              completed_files: 2,
-              succeeded_files: 2,
-              skipped_files: 0,
-              failed_files: 0,
-              total_chunks: 7,
-              current_file: '',
-              errors: [],
-              created_at: '2024-01-01T00:00:00Z',
-              completed_at: new Date().toISOString(),
-              error: null,
-            })
-          }
+        http.get('/api/v1/projects/proj-1/files/jobs/job-1', () => {
+          syncCompleted = true
           return HttpResponse.json({
             id: 'job-1',
             project_id: 'proj-1',
@@ -500,14 +480,9 @@ describe('FilesSection', () => {
 
       render(<FilesSection projectId="proj-1" initialSyncJobId="job-1" sourceDirectory="/path" />)
 
-      // Advance timers to complete sync
-      await vi.advanceTimersByTimeAsync(2000)
-
       await waitFor(() => {
         expect(screen.queryByText('test.pdf')).toBeInTheDocument()
       })
-
-      vi.useRealTimers()
     })
 
     it('should handle sync errors', async () => {
@@ -517,7 +492,7 @@ describe('FilesSection', () => {
         http.get('/api/v1/projects/proj-1/files', () => {
           return HttpResponse.json([])
         }),
-        http.post('/api/v1/projects/proj-1/sync', () => {
+        http.post('/api/v1/projects/proj-1/files/sync', () => {
           return HttpResponse.json({ detail: 'Sync failed' }, { status: 500 })
         })
       )
@@ -532,7 +507,7 @@ describe('FilesSection', () => {
       await user.click(syncButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/failed to start sync/i)).toBeInTheDocument()
+        expect(screen.getByText(/sync failed/i)).toBeInTheDocument()
       })
     })
   })

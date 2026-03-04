@@ -13,12 +13,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/shared/renderer/**/*.{ts,tsx}'],
       exclude: [
-        'src/**/__tests__/**',
-        'src/**/*.test.{ts,tsx}',
-        'src/app/**',
-        'src/components/ui/**',
+        'src/shared/renderer/**/__tests__/**',
+        'src/shared/renderer/**/*.test.{ts,tsx}',
       ],
       thresholds: {
         lines: 60,

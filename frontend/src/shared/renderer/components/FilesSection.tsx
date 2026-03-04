@@ -28,7 +28,7 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
   const dirInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -39,11 +39,11 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchFiles();
-  }, [projectId]);
+    void fetchFiles();
+  }, [fetchFiles]);
 
   // On mount: check for active sync job or use initialSyncJobId
   useEffect(() => {
@@ -62,22 +62,25 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     }
   }, [projectId, initialSyncJobId, sourceDirectory]);
 
+  const syncJobId = syncJob?.id;
+  const syncJobStatus = syncJob?.status;
+
   // Poll for sync job status
   useEffect(() => {
-    if (!syncJob || syncJob.status === "completed" || syncJob.status === "failed") {
+    if (!syncJobId || syncJobStatus === "completed" || syncJobStatus === "failed") {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      if (syncJob?.status === "completed") {
-        fetchFiles();
+      if (syncJobStatus === "completed") {
+        void fetchFiles();
       }
       return;
     }
 
     pollRef.current = setInterval(async () => {
       try {
-        const job = await api.getJob(projectId, syncJob.id);
+        const job = await api.getJob(projectId, syncJobId);
         setSyncJob(job);
       } catch {
         // ignore polling errors
@@ -85,11 +88,14 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     }, 1000);
 
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
-  }, [syncJob?.status, syncJob?.id, projectId]);
+  }, [fetchFiles, projectId, syncJobId, syncJobStatus]);
 
-  const uploadFiles = async (fileList: File[]) => {
+  const uploadFiles = useCallback(async (fileList: File[]) => {
     if (fileList.length === 0) return;
     setUploading(true);
     setError(null);
@@ -113,7 +119,7 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     setUploadProgress(null);
     if (inputRef.current) inputRef.current.value = "";
     if (dirInputRef.current) dirInputRef.current.value = "";
-  };
+  }, [projectId]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -126,7 +132,7 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     setDragOver(false);
     const fileList = e.dataTransfer.files;
     if (fileList && fileList.length > 0) uploadFiles(Array.from(fileList));
-  }, [projectId]);
+  }, [uploadFiles]);
 
   const handleSync = async () => {
     setError(null);
@@ -147,7 +153,7 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
     }
   };
 
-  const isSyncing = syncJob?.status === "pending" || syncJob?.status === "running";
+  const isSyncing = syncJobStatus === "pending" || syncJobStatus === "running";
   const completedFiles = syncJob?.completed_files ?? syncJob?.processed_files ?? 0;
   const succeededFiles =
     syncJob?.succeeded_files ??
@@ -306,7 +312,7 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
       ) : files.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="no files"
+          title="no files yet"
           description={
             sourceDirectory
               ? "Upload files, drop a folder, or run sync to index your source directory."
@@ -353,6 +359,8 @@ export function FilesSection({ projectId, sourceDirectory, initialSyncJobId }: F
                     e.stopPropagation();
                     handleDelete(file.id);
                   }}
+                  aria-label={`Delete file ${file.filename}`}
+                  title="Delete file"
                   className={`p-1 rounded-[var(--radius-xs)] text-fg-muted hover:text-error transition-all duration-100 shrink-0 ${
                     hoveredId === file.id ? "opacity-100" : "opacity-0"
                   }`}

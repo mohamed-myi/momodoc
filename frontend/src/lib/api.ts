@@ -1,7 +1,7 @@
 import { createRendererApiClient } from "@/shared/renderer/lib/apiClientCore";
 
-// Same origin — backend serves the static frontend
-const API_BASE = "";
+// Same origin in production; configurable for split frontend/backend dev and E2E.
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 // Session token (fetched once from the localhost-only /api/v1/token endpoint)
 let _token: string | null = null;

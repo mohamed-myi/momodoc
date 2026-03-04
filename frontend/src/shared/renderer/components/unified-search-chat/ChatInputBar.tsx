@@ -98,6 +98,7 @@ export function ChatInputBar({
               <button
                 type="button"
                 onClick={onToggleModeDropdown}
+                aria-label="Select AI model"
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium tracking-[-0.01em] transition-colors duration-100 border ${
                   isSearchMode
                     ? "bg-bg-tertiary border-border text-fg-muted"

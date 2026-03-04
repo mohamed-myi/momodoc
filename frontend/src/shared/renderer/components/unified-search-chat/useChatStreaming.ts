@@ -26,6 +26,9 @@ export function useChatStreaming({
   const [messages, setMessages] = useState<UnifiedChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const messageIdCounterRef = useRef(0);
+
+  const nextMessageId = () => `${crypto.randomUUID()}-${messageIdCounterRef.current++}`;
 
   const replaceMessages = useCallback((nextMessages: UnifiedChatMessage[]) => {
     setMessages(nextMessages);
@@ -39,11 +42,11 @@ export function useChatStreaming({
     async (content: string) => {
       const sid = await ensureSession();
       const userMsg: UnifiedChatMessage = {
-        id: crypto.randomUUID(),
+        id: nextMessageId(),
         role: "user",
         content,
       };
-      const assistantId = crypto.randomUUID();
+      const assistantId = nextMessageId();
 
       setMessages((prev) => [
         ...prev,
@@ -76,6 +79,10 @@ export function useChatStreaming({
           throw new Error(`Stream request failed: ${response.status}`);
         }
         const reader = response.body.getReader();
+        const handleAbort = () => {
+          void reader.cancel().catch(() => {});
+        };
+        controller.signal.addEventListener("abort", handleAbort);
         const decoder = new TextDecoder();
         let fullContent = "";
         let sources: ChatSource[] = [];
@@ -130,8 +137,17 @@ export function useChatStreaming({
               : message
           )
         );
+        controller.signal.removeEventListener("abort", handleAbort);
       } catch (error) {
-        if (error instanceof Error && error.name !== "AbortError") {
+        if (error instanceof Error && error.name === "AbortError") {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, isStreaming: false }
+                : message
+            )
+          );
+        } else {
           setMessages((prev) =>
             prev.map((message) =>
               message.id === assistantId
@@ -145,6 +161,7 @@ export function useChatStreaming({
           );
         }
       } finally {
+        abortRef.current = null;
         setIsLoading(false);
       }
     },
@@ -154,11 +171,11 @@ export function useChatStreaming({
   const searchOnly = useCallback(
     async (content: string) => {
       const userMsg: UnifiedChatMessage = {
-        id: crypto.randomUUID(),
+        id: nextMessageId(),
         role: "user",
         content,
       };
-      const assistantId = crypto.randomUUID();
+      const assistantId = nextMessageId();
 
       setMessages((prev) => [
         ...prev,
@@ -169,16 +186,17 @@ export function useChatStreaming({
 
       try {
         const results = await api.search(content.trim(), projectId);
+        const safeResults = Array.isArray(results) ? results : [];
         setMessages((prev) =>
           prev.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
                   content:
-                    results.length > 0
-                      ? `Found ${results.length} result${results.length !== 1 ? "s" : ""}`
+                    safeResults.length > 0
+                      ? `Found ${safeResults.length} result${safeResults.length !== 1 ? "s" : ""}`
                       : `No results found for "${content}"`,
-                  searchResults: results,
+                  searchResults: safeResults,
                   isStreaming: false,
                 }
               : message
@@ -187,7 +205,7 @@ export function useChatStreaming({
 
         if (isGlobal && onProjectScores) {
           const scores: Record<string, number> = {};
-          for (const result of results) {
+          for (const result of safeResults) {
             scores[result.project_id] = (scores[result.project_id] || 0) + 1;
           }
           onProjectScores(scores);
