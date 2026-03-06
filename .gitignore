@@ -50,6 +50,10 @@ desktop/.backend-runtime-staging/
 .DS_Store
 Thumbs.db
 
+# Test artifacts
+coverage/
+playwright-report/
+
 # Misc
 *.log
 *.db
